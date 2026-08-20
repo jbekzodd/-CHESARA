@@ -6,14 +6,15 @@ const app = express();
 
 const PORT = process.env.PORT || 10000;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const SITE_URL = "https://chesara.onrender.com";
 
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
 
-/* =========================================================
-   CHESARA — PROFESSIONAL API
-   ========================================================= */
+/* =====================================================
+   WEBSITE
+===================================================== */
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
@@ -23,22 +24,18 @@ app.get("/api/health", (req, res) => {
   res.json({
     success: true,
     project: "CHESARA",
-    product: "AI Chess Intelligence Platform",
     status: "online",
-    telegram: BOT_TOKEN ? "configured" : "not_configured",
+    telegram: BOT_TOKEN ? "configured" : "missing",
     time: new Date().toISOString()
   });
 });
 
 app.get("/api/status", (req, res) => {
   res.json({
-    platform: "CHESARA",
+    project: "CHESARA",
     server: "online",
     telegramBot: BOT_TOKEN ? "online" : "offline",
     chessAnalysis: "ready",
-    lichess: "ready",
-    chessCom: "ready",
-    screenshotAnalysis: "ready",
     attendance: "ready",
     reports: "ready",
     tournaments: "ready",
@@ -46,9 +43,9 @@ app.get("/api/status", (req, res) => {
   });
 });
 
-/* =========================================================
-   DASHBOARD STATISTICS
-   ========================================================= */
+/* =====================================================
+   DASHBOARD API
+===================================================== */
 
 app.get("/api/dashboard", (req, res) => {
   res.json({
@@ -58,7 +55,7 @@ app.get("/api/dashboard", (req, res) => {
     teachers: 0,
     groups: 0,
 
-    todayAttendance: {
+    attendance: {
       present: 0,
       absent: 0,
       late: 0
@@ -71,47 +68,41 @@ app.get("/api/dashboard", (req, res) => {
     },
 
     chess: {
-      analyzedGames: 0,
-      averageAccuracy: 0,
-      tournaments: 0
+      gamesAnalyzed: 0,
+      averageAccuracy: 0
     },
 
     alerts: 0
   });
 });
 
-/* =========================================================
-   AI CHESS ANALYSIS
-   ========================================================= */
+/* =====================================================
+   CHESS ANALYSIS API
+===================================================== */
 
 app.post("/api/chess/analyze", async (req, res) => {
-
   try {
-
     const { source, game, moves, player } = req.body;
 
-    if (!source && !game && !moves) {
+    if (!game && !moves) {
       return res.status(400).json({
         success: false,
-        message: "Tahlil uchun o‘yin ma'lumotlari yuborilmadi."
+        message: "Tahlil qilish uchun o‘yin ma'lumotlari yuborilmadi."
       });
     }
 
-    /*
-      Hozirgi bosqichda API o‘yinni qabul qiladi.
-      Keyingi bosqichda Stockfish engine ulanadi.
-    */
-
-    const result = {
+    res.json({
       success: true,
+      status: "received",
 
       player: player || "O‘yinchi",
-
       source: source || "manual",
 
-      accuracy: null,
+      message:
+        "O‘yin CHESARA AI tahlil tizimiga qabul qilindi.",
 
-      classification: {
+      analysis: {
+        accuracy: null,
         brilliant: 0,
         best: 0,
         excellent: 0,
@@ -124,41 +115,34 @@ app.post("/api/chess/analyze", async (req, res) => {
       style: {
         attacking: 0,
         defensive: 0,
-        positional: 0,
-        tactical: 0
+        tactical: 0,
+        positional: 0
       },
 
       opening: {
-        name: "Aniqlanmoqda...",
+        name: "Aniqlanmoqda",
         confidence: 0
       },
 
       recommendations: [
-        "O‘yin ma'lumotlari qabul qilindi.",
-        "AI chuqur tahlili keyingi engine bosqichida amalga oshiriladi."
-      ],
-
-      status: "received"
-    };
-
-    return res.json(result);
+        "O‘yin qabul qilindi.",
+        "Chuqur Stockfish tahlili keyingi modul orqali bajariladi."
+      ]
+    });
 
   } catch (error) {
+    console.error("CHESS ANALYSIS ERROR:", error);
 
-    console.error("Chess analysis error:", error);
-
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: "O‘yin tahlilida texnik xatolik yuz berdi."
     });
-
   }
-
 });
 
-/* =========================================================
+/* =====================================================
    TELEGRAM BOT
-   ========================================================= */
+===================================================== */
 
 let bot = null;
 
@@ -170,106 +154,138 @@ if (BOT_TOKEN) {
 
   console.log("🤖 CHESARA Telegram Bot ulandi.");
 
+  /* ===================================================
+     START
+  =================================================== */
+
   bot.onText(/^\/start$/, async (msg) => {
 
     const chatId = msg.chat.id;
 
-    const welcome =
-`♟️ CHESARA AI CHESS PLATFORM
+    const welcome = `
+♟️ CHESARA AI CHESS PLATFORM
 
 Xush kelibsiz.
 
-CHESARA — o‘quvchilar, ustozlar va shaxmatchilar uchun yagona aqlli boshqaruv platformasi.
+CHESARA — shaxmat markazlari, ustozlar va o‘quvchilar uchun yagona aqlli boshqaruv platformasi.
 
-Platforma orqali:
-• Darslar va davomatni boshqarish
-• O‘quvchilar rivojlanishini kuzatish
-• Shaxmat o‘yinlarini AI yordamida tahlil qilish
-• Turnirlar va natijalarni nazorat qilish
-• Avtomatik hisobotlar olish
-• Muhim holatlar bo‘yicha ogohlantirishlar olish mumkin.
+Platformada:
 
-♟️ Shaxmatni o‘ynash emas — uni chuqur tushunish uchun CHESARA.`;
+♟ O‘quvchilar
+♜ Ustozlar
+👥 Guruhlar
+📚 Darslar
+📅 Davomat
+🧠 AI o‘yin tahlili
+🏆 Turnirlar
+📰 Yangiliklar
+📊 Hisobotlar
+🔔 Avtomatik ogohlantirishlar
+
+bitta tizimga birlashtiriladi.
+
+Shaxmatni oddiy o‘yin emas,
+rivojlanish tizimiga aylantiring.
+
+— CHESARA
+`;
 
     const keyboard = {
       reply_markup: {
         inline_keyboard: [
+
           [
             {
               text: "🌐 CHESARA platformasini ochish",
               web_app: {
-                url: "https://chesara.onrender.com"
+                url: SITE_URL
               }
             }
           ],
+
           [
             {
-              text: "🧠 O‘yin tahlili"
+              text: "🧠 O‘yin tahlili",
+              callback_data: "analysis"
             },
             {
-              text: "📊 Hisobotlar"
+              text: "📊 Hisobotlar",
+              callback_data: "reports"
             }
           ],
+
           [
             {
-              text: "📚 Darslar"
+              text: "📚 Darslar",
+              callback_data: "lessons"
             },
             {
-              text: "📅 Davomat"
+              text: "📅 Davomat",
+              callback_data: "attendance"
             }
           ],
+
           [
             {
-              text: "🏆 Turnirlar"
+              text: "🏆 Turnirlar",
+              callback_data: "tournaments"
             },
             {
-              text: "📰 Yangiliklar"
+              text: "📰 Yangiliklar",
+              callback_data: "news"
             }
           ],
+
           [
             {
-              text: "🔔 Ogohlantirishlar"
+              text: "🔔 Ogohlantirishlar",
+              callback_data: "alerts"
             }
           ]
+
         ]
       }
     };
 
     await bot.sendMessage(chatId, welcome, keyboard);
-
   });
 
-  /* =====================================================
-     TELEGRAM MENULARI
-     ===================================================== */
+  /* ===================================================
+     INLINE BUTTON CALLBACKS
+  =================================================== */
 
-  bot.on("message", async (msg) => {
+  bot.on("callback_query", async (query) => {
 
-    if (!msg.text || msg.text === "/start") return;
+    const chatId = query.message.chat.id;
+    const messageId = query.message.message_id;
+    const action = query.data;
 
-    const chatId = msg.chat.id;
-    const text = msg.text;
+    try {
 
-    if (text === "🧠 O‘yin tahlili") {
+      await bot.answerCallbackQuery(query.id);
 
-      await bot.sendMessage(
-        chatId,
+      /* ---------------- ANALYSIS ---------------- */
+
+      if (action === "analysis") {
+
+        await bot.editMessageText(
 `🧠 CHESARA AI CHESS INTELLIGENCE
 
-O‘yiningizni CHESARA orqali tahlil qiling.
+O‘yin tahlili markazi.
 
-Qo‘llab-quvvatlanadigan manbalar:
+CHESARA quyidagi manbalar bilan ishlash uchun ishlab chiqiladi:
 
 ♟️ Lichess
 ♟️ Chess.com
-📸 Screenshot orqali o‘yin
+📸 Screenshot orqali Telegram o‘yini
 
-Tahlil natijasida:
+Tahlilda:
 
-‼️ Blunderlar
-❗ Xatolar
-!? Noaniq yurishlar
-⭐ Kuchli yurishlar
+‼️ Blunder
+❗ Mistake
+?! Inaccuracy
+⭐ Best Move
+‼️ Brilliant Move
 📊 Accuracy
 ⚔️ Hujumkorlik
 🛡 Himoyaviylik
@@ -277,155 +293,407 @@ Tahlil natijasida:
 
 aniqlanadi.
 
-Keyingi bosqichda o‘yinchi uslubiga mos individual opening tavsiyalari ham shakllantiriladi.`
-      );
+Eng muhimi — tizim o‘yinchining o‘ziga xos uslubini o‘rganib boradi.
 
-      return;
-    }
+Masalan:
+"Hujumkor o‘yinchi"
+"Pozitsion o‘yinchi"
+"Taktik o‘yinchi"
 
-    if (text === "📚 Darslar") {
+va shu asosida individual opening tavsiyalarini shakllantiradi.`,
+          {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🌐 Tahlil markazini ochish",
+                    web_app: {
+                      url: `${SITE_URL}?page=analysis`
+                    }
+                  }
+                ],
+                [
+                  {
+                    text: "⬅️ Bosh menyu",
+                    callback_data: "home"
+                  }
+                ]
+              ]
+            }
+          }
+        );
 
-      await bot.sendMessage(
-        chatId,
-`📚 DARS BOSHQARUVI
+        return;
+      }
 
-CHESARA dars jarayonini yagona tizimda boshqarishga mo‘ljallangan.
+      /* ---------------- REPORTS ---------------- */
 
-• Dars jadvali
-• Ustozlar
-• Guruhlar
-• O‘quvchilar
-• Dars holati
-• Dars davomati
+      if (action === "reports") {
 
-Barcha jarayonlar platforma orqali nazorat qilinadi.`
-      );
+        await bot.editMessageText(
+`📊 CHESARA ANALITIK HISOBOTLAR
 
-      return;
-    }
+Platforma avtomatik ravishda:
 
-    if (text === "📅 Davomat") {
+📅 Oylik hisobot
+📚 Darslar statistikasi
+📅 Davomat
+♟️ O‘yinlar soni
+📈 Accuracy
+🧠 O‘yinchi rivojlanishi
+🏆 Turnir natijalari
 
-      await bot.sendMessage(
-        chatId,
-`📅 DAVOMAT NAZORATI
-
-CHESARA davomat jarayonini avtomatlashtiradi.
-
-⏱ Dars boshlanganidan keyin 15 daqiqa ichida ustoz davomatni belgilamasa, tizim mas'ul administrator yoki direktorga avtomatik ogohlantirish yuboradi.
-
-O‘quvchi darsda bo‘lmagan holatlar ham qayd etiladi.`
-      );
-
-      return;
-    }
-
-    if (text === "📊 Hisobotlar") {
-
-      await bot.sendMessage(
-        chatId,
-`📊 ANALITIK HISOBOTLAR
-
-CHESARA o‘quv jarayoni bo‘yicha avtomatik hisobotlar tayyorlaydi.
+bo‘yicha hisobot tayyorlaydi.
 
 Masalan:
 
-📅 1-sentabr — 30-sentabr
+01.09 — 30.09
 
-oralig‘ida:
+oralig‘idagi o‘quvchi faoliyati alohida hisobot sifatida shakllantiriladi.`,
+          {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🌐 Hisobotlar paneli",
+                    web_app: {
+                      url: `${SITE_URL}?page=reports`
+                    }
+                  }
+                ],
+                [
+                  {
+                    text: "⬅️ Bosh menyu",
+                    callback_data: "home"
+                  }
+                ]
+              ]
+            }
+          }
+        );
 
-• O‘tilgan darslar
-• Davomat
-• Qoldirilgan darslar
-• O‘quvchi faolligi
-• Shaxmat natijalari
-• Rivojlanish ko‘rsatkichlari
+        return;
+      }
 
-umumlashtiriladi.`
-      );
+      /* ---------------- LESSONS ---------------- */
 
-      return;
-    }
+      if (action === "lessons") {
 
-    if (text === "🏆 Turnirlar") {
+        await bot.editMessageText(
+`📚 DARS BOSHQARUVI
 
-      await bot.sendMessage(
-        chatId,
+CHESARA dars jarayonini markazlashtiradi.
+
+• Ustozlar
+• O‘quvchilar
+• Guruhlar
+• Dars jadvali
+• Jonli darslar
+• Dars holati
+• Davomat nazorati
+
+hammasi bitta tizimda ishlaydi.
+
+Ustoz darsni boshlaydi → tizim darsni qayd qiladi → davomat nazorat qilinadi.`,
+          {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🌐 Darslar paneli",
+                    web_app: {
+                      url: `${SITE_URL}?page=lessons`
+                    }
+                  }
+                ],
+                [
+                  {
+                    text: "⬅️ Bosh menyu",
+                    callback_data: "home"
+                  }
+                ]
+              ]
+            }
+          }
+        );
+
+        return;
+      }
+
+      /* ---------------- ATTENDANCE ---------------- */
+
+      if (action === "attendance") {
+
+        await bot.editMessageText(
+`📅 DAVOMAT NAZORATI
+
+CHESARA avtomatik nazorat tizimiga ega bo‘ladi.
+
+⏱ Dars boshlanganidan 15 daqiqa ichida ustoz davomat qilmasa:
+
+🔔 direktor yoki super admin'ga ogohlantirish yuboriladi.
+
+O‘quvchi darsga kelmasa:
+
+⚠️ tegishli mas'ul shaxsga xabar beriladi.
+
+Barcha ma'lumotlar oylik hisobotga qo‘shiladi.`,
+          {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🌐 Davomat paneli",
+                    web_app: {
+                      url: `${SITE_URL}?page=attendance`
+                    }
+                  }
+                ],
+                [
+                  {
+                    text: "⬅️ Bosh menyu",
+                    callback_data: "home"
+                  }
+                ]
+              ]
+            }
+          }
+        );
+
+        return;
+      }
+
+      /* ---------------- TOURNAMENTS ---------------- */
+
+      if (action === "tournaments") {
+
+        await bot.editMessageText(
 `🏆 TURNIRLAR
 
-CHESARA turnir jarayonlarini ham yagona platformaga birlashtiradi.
+CHESARA turnirga tayyorgarlik jarayonini ham boshqaradi.
 
-• Yaqin turnirlar
-• Ishtirokchilar
-• Natijalar
-• Reyting
-• G‘oliblar
-• Turnirga tayyorgarlik
+🏆 Yaqin turnirlar
+👥 Ishtirokchilar
+🥇 Natijalar
+📊 Reyting
+🎥 Strimlar
+📰 Turnir yangiliklari
 
-va keyinchalik jonli turnir ma'lumotlari ham platformada ko‘rsatiladi.`
-      );
+O‘quvchi qaysi turnirga tayyorlanayotganini ham tizimda kuzatish mumkin bo‘ladi.`,
+          {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🌐 Turnirlar",
+                    web_app: {
+                      url: `${SITE_URL}?page=tournaments`
+                    }
+                  }
+                ],
+                [
+                  {
+                    text: "⬅️ Bosh menyu",
+                    callback_data: "home"
+                  }
+                ]
+              ]
+            }
+          }
+        );
 
-      return;
-    }
+        return;
+      }
 
-    if (text === "📰 Yangiliklar") {
+      /* ---------------- NEWS ---------------- */
 
-      await bot.sendMessage(
-        chatId,
-`📰 CHESS NEWS
+      if (action === "news") {
 
-CHESARA shaxmat olamidagi muhim ma'lumotlarni bir joyga jamlaydi.
+        await bot.editMessageText(
+`📰 CHESARA CHESS NEWS
+
+Platformada shaxmatga oid muhim yangiliklar jamlanadi.
 
 🏆 Turnirlar
 🥇 G‘oliblar
 📊 Natijalar
-🎥 Strimlar
-♟️ Muhim shaxmat yangiliklari
+🎥 Jonli strimlar
+♟️ Muhim voqealar
 
-Yangiliklar tizimi keyinchalik admin panel orqali boshqariladi.`
-      );
+Yangiliklarni Super Admin boshqaradi.`,
+          {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🌐 Yangiliklar",
+                    web_app: {
+                      url: `${SITE_URL}?page=news`
+                    }
+                  }
+                ],
+                [
+                  {
+                    text: "⬅️ Bosh menyu",
+                    callback_data: "home"
+                  }
+                ]
+              ]
+            }
+          }
+        );
 
-      return;
-    }
+        return;
+      }
 
-    if (text === "🔔 Ogohlantirishlar") {
+      /* ---------------- ALERTS ---------------- */
 
-      await bot.sendMessage(
-        chatId,
+      if (action === "alerts") {
+
+        await bot.editMessageText(
 `🔔 INTELLIGENT ALERTS
 
-CHESARA muhim holatlarni avtomatik nazorat qiladi.
+CHESARA muhim jarayonlarni avtomatik nazorat qiladi.
 
-⚠️ Davomat o‘z vaqtida qilinmasa
-⚠️ O‘quvchi darsni bajarmasa
-⚠️ Dars jarayonida muammo yuzaga kelsa
-⚠️ Belgilangan nazorat bajarilmasa
+⚠️ Ustoz davomat qilmasa
+⚠️ O‘quvchi darsga kelmasa
+⚠️ Dars bajarilmasa
+⚠️ Nazorat vazifasi bajarilmasa
 
-tizim tegishli mas'ul shaxsga xabar yuborish mexanizmini ishga tushiradi.`
-      );
+tizim tegishli mas'ul shaxsga avtomatik xabar yuboradi.
 
-      return;
+15 daqiqalik davomat nazorati ham shu tizimning bir qismi bo‘ladi.`,
+          {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🌐 Ogohlantirishlar",
+                    web_app: {
+                      url: `${SITE_URL}?page=alerts`
+                    }
+                  }
+                ],
+                [
+                  {
+                    text: "⬅️ Bosh menyu",
+                    callback_data: "home"
+                  }
+                ]
+              ]
+            }
+          }
+        );
+
+        return;
+      }
+
+      /* ---------------- HOME ---------------- */
+
+      if (action === "home") {
+
+        await bot.editMessageText(
+`♟️ CHESARA AI CHESS PLATFORM
+
+Bosh menyu.
+
+Platformaga kirish yoki kerakli modulni tanlang.`,
+          {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🌐 CHESARA platformasini ochish",
+                    web_app: {
+                      url: SITE_URL
+                    }
+                  }
+                ],
+                [
+                  {
+                    text: "🧠 O‘yin tahlili",
+                    callback_data: "analysis"
+                  },
+                  {
+                    text: "📊 Hisobotlar",
+                    callback_data: "reports"
+                  }
+                ],
+                [
+                  {
+                    text: "📚 Darslar",
+                    callback_data: "lessons"
+                  },
+                  {
+                    text: "📅 Davomat",
+                    callback_data: "attendance"
+                  }
+                ],
+                [
+                  {
+                    text: "🏆 Turnirlar",
+                    callback_data: "tournaments"
+                  },
+                  {
+                    text: "📰 Yangiliklar",
+                    callback_data: "news"
+                  }
+                ],
+                [
+                  {
+                    text: "🔔 Ogohlantirishlar",
+                    callback_data: "alerts"
+                  }
+                ]
+              ]
+            }
+          }
+        );
+
+        return;
+      }
+
+    } catch (error) {
+
+      console.error("TELEGRAM CALLBACK ERROR:", error);
+
     }
 
   });
 
   bot.on("polling_error", (error) => {
-    console.error("Telegram polling error:", error.message);
+    console.error("TELEGRAM POLLING ERROR:", error.message);
   });
 
 } else {
 
-  console.log("⚠️ TELEGRAM_BOT_TOKEN Render Environment Variables'da topilmadi.");
+  console.log(
+    "⚠️ TELEGRAM_BOT_TOKEN Render Environment Variables'da topilmadi."
+  );
 
 }
 
-/* =========================================================
+/* =====================================================
    SERVER START
-   ========================================================= */
+===================================================== */
 
 app.listen(PORT, "0.0.0.0", () => {
-
   console.log(`🚀 CHESARA server ${PORT}-portda ishlayapti.`);
   console.log("⏰ CHESARA dars nazorati ishga tushdi.");
-
 });
