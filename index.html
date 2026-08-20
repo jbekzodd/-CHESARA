@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  />
+
+  <meta
+    name="description"
+    content="CHESARA — xalqaro AI shaxmat platformasi"
+  />
+
+  <meta name="theme-color" content="#07111f" />
+
+  <title>CHESARA — AI Chess Platform</title>
+
+  <!-- React -->
+  <script
+    crossorigin
+    src="https://unpkg.com/react@18/umd/react.production.min.js">
+  </script>
+
+  <script
+    crossorigin
+    src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">
+  </script>
+
+  <!-- Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: [
+              "Inter",
+              "ui-sans-serif",
+              "system-ui",
+              "sans-serif"
+            ]
+          },
+
+          colors: {
+            chess: {
+              bg: "#07111f",
+              panel: "#0c1828",
+              panel2: "#101f32",
+              border: "#1d3047",
+              green: "#19c37d",
+              green2: "#0ea66a",
+              gold: "#eab308"
+            }
+          },
+
+          boxShadow: {
+            glow: "0 0 35px rgba(25,195,125,0.12)"
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body,
+    #root {
+      margin: 0;
+      min-height: 100%;
+      width: 100%;
+    }
+
+    body {
+      background: #07111f;
+      color: #f8fafc;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    ::-webkit-scrollbar {
+      width: 7px;
+      height: 7px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #07111f;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #243852;
+      border-radius: 999px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #19c37d;
+    }
+
+    .glass {
+      background: rgba(12, 24, 40, 0.82);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    .chess-gradient {
+      background:
+        radial-gradient(
+          circle at 20% 10%,
+          rgba(25, 195, 125, 0.14),
+          transparent 30%
+        ),
+        radial-gradient(
+          circle at 90% 20%,
+          rgba(59, 130, 246, 0.10),
+          transparent 30%
+        ),
+        #07111f;
+    }
+
+    .animate-fade {
+      animation: fadeIn 0.35s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(5px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <!-- CHESARA frontend -->
+  <script
+    type="text/babel"
+    src="./app.js">
+  </script>
+</body>
+</html>
