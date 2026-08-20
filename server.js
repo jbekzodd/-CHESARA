@@ -1,347 +1,587 @@
+// ============================================================
+// CHESARA — Main Server
+// Render + Telegram Bot + Attendance Scheduler
+// ============================================================
+
 const express = require("express");
 const cors = require("cors");
 
+const {
+  startScheduler,
+  getLessons,
+  getLesson,
+  addLesson,
+  markAttendance,
+  finishLesson
+} = require("./scheduler");
+
 const app = express();
-const PORT = process.env.PORT || 10000;
+
+const PORT = process.env.PORT || 3000;
+
+// Telegram bot
+let bot = null;
+
+try {
+  const TelegramBot = require("node-telegram-bot-api");
+
+  if (process.env.TELEGRAM_BOT_TOKEN) {
+    bot = new TelegramBot(
+      process.env.TELEGRAM_BOT_TOKEN,
+      {
+        polling: true
+      }
+    );
+
+    console.log("🤖 CHESARA Telegram Bot ulandi.");
+  } else {
+    console.log(
+      "⚠️ TELEGRAM_BOT_TOKEN hali Render Environment Variables'da yo'q."
+    );
+  }
+} catch (error) {
+  console.log(
+    "⚠️ Telegram moduli hali o'rnatilmagan yoki mavjud emas."
+  );
+}
+
+// ------------------------------------------------------------
+// Middleware
+// ------------------------------------------------------------
 
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// ===============================
-// CHESARA SERVER
-// ===============================
-
-const startTime = new Date();
+// ------------------------------------------------------------
+// Health Check
+// ------------------------------------------------------------
 
 app.get("/", (req, res) => {
   res.json({
     success: true,
-    name: "CHESARA",
-    message: "CHESARA AI Chess Platform server ishlayapti.",
+    project: "CHESARA",
+    message: "CHESARA server ishlayapti ♟️",
     status: "online",
-    version: "1.0.0",
-    startedAt: startTime.toISOString()
+    time: new Date().toISOString()
   });
 });
 
-app.get("/api/health", (req, res) => {
+app.get("/health", (req, res) => {
   res.json({
     success: true,
-    status: "online",
-    service: "CHESARA API",
-    timestamp: new Date().toISOString()
+    status: "healthy",
+    telegramBot: Boolean(bot),
+    serverTime: new Date().toISOString()
   });
 });
 
-// ===============================
-// DASHBOARD
-// ===============================
-
-app.get("/api/dashboard", (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      students: 0,
-      groups: 0,
-      todayLessons: 0,
-      attendance: 0,
-      activeLessons: 0,
-      pendingWarnings: 0
-    }
-  });
-});
-
-// ===============================
-// STUDENTS
-// ===============================
-
-app.get("/api/students", (req, res) => {
-  res.json({
-    success: true,
-    data: []
-  });
-});
-
-app.post("/api/students", (req, res) => {
-  const { name, phone, groupId } = req.body;
-
-  if (!name) {
-    return res.status(400).json({
-      success: false,
-      message: "O‘quvchi ismi kiritilishi kerak."
-    });
-  }
-
-  res.status(201).json({
-    success: true,
-    message: "O‘quvchi qabul qilindi.",
-    data: {
-      id: "student_" + Date.now(),
-      name,
-      phone: phone || "",
-      groupId: groupId || null
-    }
-  });
-});
-
-// ===============================
-// GROUPS
-// ===============================
-
-app.get("/api/groups", (req, res) => {
-  res.json({
-    success: true,
-    data: []
-  });
-});
-
-app.post("/api/groups", (req, res) => {
-  const { name, coachId, days, time, price } = req.body;
-
-  if (!name) {
-    return res.status(400).json({
-      success: false,
-      message: "Guruh nomi kiritilishi kerak."
-    });
-  }
-
-  res.status(201).json({
-    success: true,
-    message: "Guruh qabul qilindi.",
-    data: {
-      id: "group_" + Date.now(),
-      name,
-      coachId: coachId || null,
-      days: days || "",
-      time: time || "",
-      price: Number(price) || 0
-    }
-  });
-});
-
-// ===============================
-// LESSONS
-// ===============================
+// ------------------------------------------------------------
+// API — Darslar
+// ------------------------------------------------------------
 
 app.get("/api/lessons", (req, res) => {
+  try {
+    const lessons = getLessons();
+
+    res.json({
+      success: true,
+      count: lessons.length,
+      lessons
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Darslarni olishda xatolik."
+    });
+  }
+});
+
+// ------------------------------------------------------------
+// API — Bitta dars
+// ------------------------------------------------------------
+
+app.get("/api/lessons/:id", (req, res) => {
+  const lesson = getLesson(req.params.id);
+
+  if (!lesson) {
+    return res.status(404).json({
+      success: false,
+      message: "Dars topilmadi."
+    });
+  }
+
   res.json({
     success: true,
-    data: []
+    lesson
   });
 });
 
-app.post("/api/lessons/start", (req, res) => {
-  const { groupId, coachId } = req.body;
+// ------------------------------------------------------------
+// API — Yangi dars yaratish
+// ------------------------------------------------------------
 
-  res.status(201).json({
-    success: true,
-    message: "Dars boshlandi.",
-    data: {
-      id: "lesson_" + Date.now(),
-      groupId: groupId || null,
-      coachId: coachId || null,
-      startedAt: new Date().toISOString(),
-      attendanceDeadline: new Date(
-        Date.now() + 15 * 60 * 1000
-      ).toISOString(),
-      status: "active"
+app.post("/api/lessons", (req, res) => {
+  try {
+    const {
+      id,
+      groupId,
+      groupName,
+      coachId,
+      coachName,
+      directorTelegramId,
+      startTime,
+      durationMinutes
+    } = req.body;
+
+    if (
+      !groupName ||
+      !coachName ||
+      !startTime
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "groupName, coachName va startTime kerak."
+      });
     }
-  });
+
+    const lesson = addLesson({
+      id:
+        id ||
+        "lesson_" +
+          Date.now(),
+
+      groupId:
+        groupId || null,
+
+      groupName,
+
+      coachId:
+        coachId || null,
+
+      coachName,
+
+      directorTelegramId:
+        directorTelegramId || null,
+
+      startTime,
+
+      durationMinutes:
+        Number(durationMinutes) || 90
+    });
+
+    res.json({
+      success: true,
+      message: "Dars yaratildi.",
+      lesson
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Dars yaratishda xatolik."
+    });
+  }
 });
 
-// ===============================
-// ATTENDANCE
-// ===============================
+// ------------------------------------------------------------
+// API — Davomat qilish
+// ------------------------------------------------------------
 
-app.get("/api/attendance", (req, res) => {
-  res.json({
-    success: true,
-    data: []
-  });
-});
+app.post(
+  "/api/lessons/:id/attendance",
+  (req, res) => {
+    try {
+      const result =
+        markAttendance(req.params.id);
 
-app.post("/api/attendance", (req, res) => {
-  const { lessonId, studentId, status } = req.body;
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
 
-  res.status(201).json({
-    success: true,
-    message: "Davomat saqlandi.",
-    data: {
-      lessonId,
-      studentId,
-      status: status || "present",
-      createdAt: new Date().toISOString()
+      res.json({
+        success: true,
+        message:
+          "Davomat muvaffaqiyatli qayd qilindi.",
+        lesson: result.lesson
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        success: false,
+        message:
+          "Davomatni saqlashda xatolik."
+      });
     }
-  });
-});
+  }
+);
 
-// ===============================
-// 15 DАQIQA DAVOMAT NAZORATI
-// ===============================
+// ------------------------------------------------------------
+// API — Darsni tugatish
+// ------------------------------------------------------------
 
-app.get("/api/attendance/warnings", (req, res) => {
-  res.json({
-    success: true,
-    data: [],
-    rule: {
-      attendanceDeadlineMinutes: 15,
-      action: "director_notification"
+app.post(
+  "/api/lessons/:id/finish",
+  (req, res) => {
+    try {
+      const result =
+        finishLesson(req.params.id);
+
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          message: "Dars topilmadi."
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Dars tugatildi."
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        success: false,
+        message:
+          "Darsni tugatishda xatolik."
+      });
     }
-  });
-});
+  }
+);
 
-// ===============================
-// CHESS GAMES
-// ===============================
+// ------------------------------------------------------------
+// Telegram — Test xabari
+// ------------------------------------------------------------
 
-app.get("/api/games", (req, res) => {
-  res.json({
-    success: true,
-    data: []
-  });
-});
+app.post("/api/telegram/test", async (req, res) => {
+  if (!bot) {
+    return res.status(503).json({
+      success: false,
+      message:
+        "Telegram bot ulanmagan. TELEGRAM_BOT_TOKEN ni tekshiring."
+    });
+  }
 
-app.post("/api/games/import", (req, res) => {
   const {
-    source,
-    player,
-    opponent,
-    moves,
-    pgn
+    chatId,
+    message
   } = req.body;
 
-  res.status(201).json({
-    success: true,
-    message: "O‘yin tahlil uchun qabul qilindi.",
-    data: {
-      id: "game_" + Date.now(),
-      source: source || "unknown",
-      player: player || "",
-      opponent: opponent || "",
-      moves: moves || [],
-      pgn: pgn || "",
-      status: "pending_analysis",
-      createdAt: new Date().toISOString()
+  if (!chatId || !message) {
+    return res.status(400).json({
+      success: false,
+      message:
+        "chatId va message kerak."
+    });
+  }
+
+  try {
+    await bot.sendMessage(
+      chatId,
+      message
+    );
+
+    res.json({
+      success: true,
+      message:
+        "Telegram xabari yuborildi."
+    });
+  } catch (error) {
+    console.error(
+      "Telegram xatosi:",
+      error.message
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        "Telegram xabarini yuborib bo'lmadi.",
+      error: error.message
+    });
+  }
+});
+
+// ------------------------------------------------------------
+// Scheduler → Telegram
+// ------------------------------------------------------------
+
+function sendAttendanceWarning(warning) {
+  if (!bot) {
+    console.log(
+      "⚠️ Bot ulanmagan. Ogohlantirish:",
+      warning.message
+    );
+
+    return;
+  }
+
+  const chatId =
+    warning.directorTelegramId;
+
+  if (!chatId) {
+    console.log(
+      "⚠️ Direktor Telegram ID mavjud emas."
+    );
+
+    return;
+  }
+
+  bot
+    .sendMessage(
+      chatId,
+      warning.message
+    )
+    .then(() => {
+      console.log(
+        "✅ Direktor ogohlantirildi:",
+        chatId
+      );
+    })
+    .catch(error => {
+      console.error(
+        "❌ Telegram ogohlantirish xatosi:",
+        error.message
+      );
+    });
+}
+
+// ------------------------------------------------------------
+// Telegram Bot Commands
+// ------------------------------------------------------------
+
+if (bot) {
+
+  bot.setMyCommands([
+    {
+      command: "start",
+      description:
+        "CHESARA'ni boshlash"
+    },
+    {
+      command: "darslar",
+      description:
+        "Mening darslarim"
+    },
+    {
+      command: "davomat",
+      description:
+        "Davomat"
+    },
+    {
+      command: "hisobot",
+      description:
+        "Hisobotlar"
+    },
+    {
+      command: "tahlil",
+      description:
+        "Shaxmat o'yini tahlili"
     }
+  ]).catch(error => {
+    console.error(
+      "Bot command xatosi:",
+      error.message
+    );
   });
-});
 
-// ===============================
-// AI ANALYSIS
-// ===============================
+  bot.onText(
+    /\/start/,
+    async msg => {
 
-app.post("/api/analysis/game", (req, res) => {
-  const { gameId, pgn } = req.body;
+      const chatId =
+        msg.chat.id;
 
-  res.status(202).json({
-    success: true,
-    message: "O‘yin AI tahlil navbatiga qo‘yildi.",
-    data: {
-      analysisId: "analysis_" + Date.now(),
-      gameId: gameId || null,
-      pgnReceived: Boolean(pgn),
-      status: "queued"
+      await bot.sendMessage(
+        chatId,
+
+        `♟️ CHESARA'ga xush kelibsiz!
+
+AI Shaxmat Platformasi
+
+Bu bot orqali:
+
+♟️ Darslar
+📅 Davomat
+📊 Hisobotlar
+🔔 Ogohlantirishlar
+🧠 O'yin tahlili
+🏆 Turnirlar
+📰 Yangiliklar
+
+boshqariladi.
+
+CHESARA — shaxmatni oddiy emas,
+aqlli tizimga aylantiradi.`
+      );
     }
-  });
-});
+  );
 
-// ===============================
-// PLAYER STYLE
-// ===============================
+  bot.onText(
+    /\/darslar/,
+    async msg => {
 
-app.get("/api/players/:playerId/style", (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      playerId: req.params.playerId,
-      style: null,
-      categories: [
-        "aggressive",
-        "defensive",
-        "positional",
-        "tactical",
-        "endgame",
-        "opening"
-      ],
-      message: "Yetarli o‘yinlar yig‘ilgandan keyin AI uslubni aniqlaydi."
+      const lessons =
+        getLessons();
+
+      const chatId =
+        msg.chat.id;
+
+      const myLessons =
+        lessons.filter(
+          lesson =>
+            String(
+              lesson.coachTelegramId
+            ) === String(chatId)
+        );
+
+      if (myLessons.length === 0) {
+
+        return bot.sendMessage(
+          chatId,
+          "📚 Hozircha sizga biriktirilgan dars topilmadi."
+        );
+      }
+
+      const text =
+        myLessons
+          .slice(0, 10)
+          .map(
+            lesson =>
+              `♟️ ${lesson.groupName}\n` +
+              `👨‍🏫 ${lesson.coachName}\n` +
+              `⏰ ${lesson.startTime}\n` +
+              `📅 Davomat: ${
+                lesson.attendanceTaken
+                  ? "Qilingan ✅"
+                  : "Kutilmoqda ⏳"
+              }`
+          )
+          .join("\n\n");
+
+      await bot.sendMessage(
+        chatId,
+        text
+      );
     }
-  });
-});
+  );
 
-// ===============================
-// TOURNAMENTS
-// ===============================
+  bot.onText(
+    /\/davomat/,
+    async msg => {
 
-app.get("/api/tournaments", (req, res) => {
-  res.json({
-    success: true,
-    data: []
-  });
-});
+      await bot.sendMessage(
+        msg.chat.id,
 
-// ===============================
-// NEWS
-// ===============================
+        `📅 DAVOMAT
 
-app.get("/api/news", (req, res) => {
-  res.json({
-    success: true,
-    data: []
-  });
-});
+Davomatni CHESARA web panelidan
+bir bosishda qayd qilishingiz mumkin.
 
-// ===============================
-// MONTHLY REPORT
-// ===============================
-
-app.get("/api/reports/monthly", (req, res) => {
-  const month = req.query.month || "current";
-
-  res.json({
-    success: true,
-    data: {
-      month,
-      students: 0,
-      lessons: 0,
-      attendance: 0,
-      payments: 0,
-      missedLessons: 0,
-      chessGames: 0,
-      aiAnalyses: 0
+Keyingi bosqichda Telegramning
+o'zidan ham davomat qilish
+imkoniyatini qo'shamiz.`
+      );
     }
-  });
-});
+  );
 
-// ===============================
-// TELEGRAM BOT READY ENDPOINT
-// ===============================
+  bot.onText(
+    /\/hisobot/,
+    async msg => {
 
-app.post("/api/telegram/webhook", (req, res) => {
-  console.log("Telegram update:", req.body);
+      await bot.sendMessage(
+        msg.chat.id,
 
-  res.json({
-    success: true
-  });
-});
+        `📊 OYLIK HISOBOT
 
-// ===============================
-// 404
-// ===============================
+CHESARA keyinchalik:
 
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "CHESARA API endpoint topilmadi."
-  });
-});
+• o'quvchi qatnashuvi
+• darslar soni
+• o'tkazib yuborilgan darslar
+• to'lovlar
+• qarzdorlik
+• ustoz faoliyati
 
-// ===============================
-// START
-// ===============================
+bo'yicha avtomatik hisobot yaratadi.`
+      );
+    }
+  );
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("=================================");
-  console.log("CHESARA SERVER IS RUNNING");
-  console.log("PORT:", PORT);
-  console.log("=================================");
-});
+  bot.onText(
+    /\/tahlil/,
+    async msg => {
+
+      await bot.sendMessage(
+        msg.chat.id,
+
+        `🧠 CHESARA O'YIN TAHLILI
+
+Lichess
+Chess.com
+Telegram shaxmat
+Screenshot
+
+orqali yuborilgan o'yinlarni
+tahlil qilish moduli ulanadi.
+
+♟️ ?? — katta xato
+♟️ ? — xato
+♟️ ! — yaxshi yurish
+♟️ !! — ajoyib yurish
+
+Bundan tashqari o'yinchining
+shaxsiy o'yin uslubi va debuti
+aniqlanadi.`
+      );
+    }
+  );
+}
+
+// ------------------------------------------------------------
+// Server Start
+// ------------------------------------------------------------
+
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+
+    console.log(
+      `🚀 CHESARA server ${PORT}-portda ishlayapti.`
+    );
+
+    startScheduler(
+      sendAttendanceWarning
+    );
+  }
+);
+
+// ------------------------------------------------------------
+// Global error handling
+// ------------------------------------------------------------
+
+process.on(
+  "uncaughtException",
+  error => {
+    console.error(
+      "❌ Uncaught Exception:",
+      error
+    );
+  }
+);
+
+process.on(
+  "unhandledRejection",
+  error => {
+    console.error(
+      "❌ Unhandled Rejection:",
+      error
+    );
+  }
+);
