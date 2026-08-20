@@ -1,168 +1,1190 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-  <meta charset="UTF-8" />
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-  />
-
-  <meta
-    name="description"
-    content="CHESARA — xalqaro AI shaxmat platformasi"
-  />
-
-  <meta name="theme-color" content="#07111f" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <title>CHESARA — AI Chess Platform</title>
-
-  <!-- React -->
-  <script
-    crossorigin
-    src="https://unpkg.com/react@18/umd/react.production.min.js">
-  </script>
-
-  <script
-    crossorigin
-    src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">
-  </script>
-
-  <!-- Babel -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <!-- Tailwind -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: [
-              "Inter",
-              "ui-sans-serif",
-              "system-ui",
-              "sans-serif"
-            ]
-          },
-
-          colors: {
-            chess: {
-              bg: "#07111f",
-              panel: "#0c1828",
-              panel2: "#101f32",
-              border: "#1d3047",
-              green: "#19c37d",
-              green2: "#0ea66a",
-              gold: "#eab308"
-            }
-          },
-
-          boxShadow: {
-            glow: "0 0 35px rgba(25,195,125,0.12)"
-          }
-        }
-      }
-    };
-  </script>
 
   <style>
     * {
       box-sizing: border-box;
-    }
-
-    html,
-    body,
-    #root {
       margin: 0;
-      min-height: 100%;
-      width: 100%;
+      padding: 0;
     }
 
     body {
-      background: #07111f;
-      color: #f8fafc;
-      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-      -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
+      font-family: Inter, Arial, sans-serif;
+      background: #f5f7fb;
+      color: #172033;
+      min-height: 100vh;
     }
 
     button,
     input,
-    select,
-    textarea {
+    select {
       font: inherit;
     }
 
     button {
-      -webkit-tap-highlight-color: transparent;
+      cursor: pointer;
     }
 
-    ::-webkit-scrollbar {
-      width: 7px;
-      height: 7px;
+    .app {
+      display: flex;
+      min-height: 100vh;
     }
 
-    ::-webkit-scrollbar-track {
-      background: #07111f;
+    /* SIDEBAR */
+
+    .sidebar {
+      width: 260px;
+      background: #111827;
+      color: white;
+      padding: 22px 16px;
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      overflow-y: auto;
     }
 
-    ::-webkit-scrollbar-thumb {
-      background: #243852;
-      border-radius: 999px;
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 8px 10px 25px;
     }
 
-    ::-webkit-scrollbar-thumb:hover {
-      background: #19c37d;
+    .brand-logo {
+      width: 43px;
+      height: 43px;
+      border-radius: 13px;
+      display: grid;
+      place-items: center;
+      background: #ffffff;
+      color: #111827;
+      font-size: 25px;
     }
 
-    .glass {
-      background: rgba(12, 24, 40, 0.82);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+    .brand-text strong {
+      display: block;
+      font-size: 21px;
+      letter-spacing: 1px;
     }
 
-    .chess-gradient {
-      background:
-        radial-gradient(
-          circle at 20% 10%,
-          rgba(25, 195, 125, 0.14),
-          transparent 30%
-        ),
-        radial-gradient(
-          circle at 90% 20%,
-          rgba(59, 130, 246, 0.10),
-          transparent 30%
-        ),
-        #07111f;
+    .brand-text span {
+      display: block;
+      color: #9ca3af;
+      font-size: 11px;
+      margin-top: 2px;
     }
 
-    .animate-fade {
-      animation: fadeIn 0.35s ease-out;
+    .menu-title {
+      color: #6b7280;
+      font-size: 11px;
+      text-transform: uppercase;
+      padding: 18px 12px 8px;
+      letter-spacing: .8px;
     }
 
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateY(5px);
+    .menu button {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: #d1d5db;
+      padding: 12px;
+      border-radius: 10px;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      margin-bottom: 3px;
+      transition: .2s;
+    }
+
+    .menu button:hover,
+    .menu button.active {
+      background: #273449;
+      color: white;
+    }
+
+    .menu-icon {
+      width: 25px;
+      text-align: center;
+      font-size: 17px;
+    }
+
+    .sidebar-bottom {
+      margin-top: 25px;
+      padding: 14px;
+      border-radius: 12px;
+      background: #1f2937;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: #22c55e;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .sidebar-bottom small {
+      color: #9ca3af;
+    }
+
+    /* MAIN */
+
+    .main {
+      margin-left: 260px;
+      width: calc(100% - 260px);
+      min-height: 100vh;
+    }
+
+    .topbar {
+      height: 72px;
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 30px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .page-title h1 {
+      font-size: 22px;
+    }
+
+    .page-title p {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 3px;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: white;
+    }
+
+    .profile {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-left: 8px;
+    }
+
+    .avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: #111827;
+      color: white;
+      display: grid;
+      place-items: center;
+      font-weight: bold;
+    }
+
+    .profile small {
+      color: #6b7280;
+      display: block;
+    }
+
+    /* CONTENT */
+
+    .content {
+      padding: 30px;
+    }
+
+    .welcome {
+      background: linear-gradient(135deg, #111827, #293548);
+      color: white;
+      border-radius: 18px;
+      padding: 28px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    .welcome h2 {
+      font-size: 27px;
+      margin-bottom: 8px;
+    }
+
+    .welcome p {
+      color: #cbd5e1;
+      max-width: 650px;
+      line-height: 1.5;
+    }
+
+    .welcome-chess {
+      font-size: 85px;
+      opacity: .9;
+      padding-right: 25px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 15px;
+      padding: 20px;
+    }
+
+    .stat-head {
+      display: flex;
+      justify-content: space-between;
+      color: #6b7280;
+      font-size: 13px;
+    }
+
+    .stat-value {
+      font-size: 29px;
+      font-weight: 700;
+      margin-top: 11px;
+    }
+
+    .stat-note {
+      font-size: 11px;
+      color: #22a35a;
+      margin-top: 6px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 20px;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 15px;
+      padding: 20px;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .card-header h3 {
+      font-size: 17px;
+    }
+
+    .card-header span {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .quick {
+      border: 1px solid #e5e7eb;
+      background: #fafafa;
+      border-radius: 12px;
+      padding: 15px;
+      text-align: left;
+      transition: .2s;
+    }
+
+    .quick:hover {
+      border-color: #9ca3af;
+      transform: translateY(-1px);
+    }
+
+    .quick strong {
+      display: block;
+      margin-top: 8px;
+    }
+
+    .quick small {
+      color: #6b7280;
+      display: block;
+      margin-top: 4px;
+    }
+
+    .activity {
+      display: flex;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .activity:last-child {
+      border-bottom: 0;
+    }
+
+    .activity-icon {
+      width: 35px;
+      height: 35px;
+      border-radius: 9px;
+      background: #f3f4f6;
+      display: grid;
+      place-items: center;
+    }
+
+    .activity strong {
+      font-size: 13px;
+    }
+
+    .activity small {
+      display: block;
+      color: #6b7280;
+      margin-top: 3px;
+    }
+
+    /* PANELS */
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 13px;
+      border-bottom: 1px solid #edf0f3;
+      font-size: 13px;
+    }
+
+    th {
+      color: #6b7280;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .badge {
+      padding: 5px 9px;
+      border-radius: 20px;
+      font-size: 11px;
+      display: inline-block;
+    }
+
+    .badge.green {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .badge.yellow {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .badge.red {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .action-btn {
+      border: 0;
+      background: #111827;
+      color: white;
+      padding: 9px 13px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+
+    .action-btn.light {
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 45px 20px;
+      color: #6b7280;
+    }
+
+    /* MOBILE */
+
+    .mobile-menu {
+      display: none;
+    }
+
+    @media (max-width: 1000px) {
+      .stats {
+        grid-template-columns: repeat(2, 1fr);
       }
 
-      to {
-        opacity: 1;
-        transform: translateY(0);
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .sidebar {
+        display: none;
+      }
+
+      .main {
+        margin-left: 0;
+        width: 100%;
+      }
+
+      .mobile-menu {
+        display: block;
+      }
+
+      .content {
+        padding: 18px;
+      }
+
+      .topbar {
+        padding: 0 15px;
+      }
+
+      .welcome-chess {
+        display: none;
+      }
+
+      .stats {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .stat {
+        padding: 14px;
+      }
+
+      .stat-value {
+        font-size: 23px;
       }
     }
   </style>
 </head>
 
 <body>
-  <div id="root"></div>
 
-  <!-- CHESARA frontend -->
-  <script
-    type="text/babel"
-    src="./app.js">
-  </script>
+<div class="app">
+
+  <!-- SIDEBAR -->
+
+  <aside class="sidebar">
+
+    <div class="brand">
+      <div class="brand-logo">♟</div>
+
+      <div class="brand-text">
+        <strong>CHESARA</strong>
+        <span>AI CHESS PLATFORM</span>
+      </div>
+    </div>
+
+    <div class="menu-title">Asosiy</div>
+
+    <nav class="menu">
+
+      <button class="active" onclick="showPanel('dashboard', this)">
+        <span class="menu-icon">⌂</span>
+        Boshqaruv paneli
+      </button>
+
+      <button onclick="showPanel('students', this)">
+        <span class="menu-icon">♟</span>
+        O‘quvchilar
+      </button>
+
+      <button onclick="showPanel('teachers', this)">
+        <span class="menu-icon">♜</span>
+        Ustozlar
+      </button>
+
+      <button onclick="showPanel('groups', this)">
+        <span class="menu-icon">👥</span>
+        Guruhlar
+      </button>
+
+      <button onclick="showPanel('attendance', this)">
+        <span class="menu-icon">✓</span>
+        Davomat
+      </button>
+
+      <button onclick="showPanel('lessons', this)">
+        <span class="menu-icon">📚</span>
+        Darslar
+      </button>
+
+    </nav>
+
+    <div class="menu-title">AI Shaxmat</div>
+
+    <nav class="menu">
+
+      <button onclick="showPanel('analysis', this)">
+        <span class="menu-icon">🧠</span>
+        O‘yin tahlili
+      </button>
+
+      <button onclick="showPanel('tournaments', this)">
+        <span class="menu-icon">🏆</span>
+        Turnirlar
+      </button>
+
+      <button onclick="showPanel('news', this)">
+        <span class="menu-icon">📰</span>
+        Yangiliklar
+      </button>
+
+    </nav>
+
+    <div class="menu-title">Boshqaruv</div>
+
+    <nav class="menu">
+
+      <button onclick="showPanel('reports', this)">
+        <span class="menu-icon">📊</span>
+        Hisobotlar
+      </button>
+
+      <button onclick="showPanel('alerts', this)">
+        <span class="menu-icon">🔔</span>
+        Ogohlantirishlar
+      </button>
+
+      <button onclick="showPanel('settings', this)">
+        <span class="menu-icon">⚙</span>
+        Sozlamalar
+      </button>
+
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div>
+        <span class="status-dot"></span>
+        <strong>CHESARA Online</strong>
+      </div>
+      <small>AI tizim faol</small>
+    </div>
+
+  </aside>
+
+  <!-- MAIN -->
+
+  <main class="main">
+
+    <header class="topbar">
+
+      <div class="page-title">
+        <h1 id="pageTitle">Boshqaruv paneli</h1>
+        <p id="pageSubtitle">CHESARA markazining umumiy holati</p>
+      </div>
+
+      <div class="top-actions">
+
+        <button class="icon-btn" onclick="checkServer()" title="Server holati">
+          ●
+        </button>
+
+        <div class="profile">
+          <div class="avatar">SA</div>
+          <div>
+            <strong>Super Admin</strong>
+            <small>Administrator</small>
+          </div>
+        </div>
+
+      </div>
+
+    </header>
+
+    <section class="content">
+
+      <!-- DASHBOARD -->
+
+      <div id="dashboard" class="panel active">
+
+        <div class="welcome">
+
+          <div>
+            <h2>CHESARA'ga xush kelibsiz ♟️</h2>
+
+            <p>
+              Shaxmat markazingizni bitta aqlli tizim orqali boshqaring.
+              O‘quvchilar, ustozlar, davomat, darslar, hisobotlar,
+              turnirlar va AI o‘yin tahlili bir joyda.
+            </p>
+          </div>
+
+          <div class="welcome-chess">♞</div>
+
+        </div>
+
+        <div class="stats">
+
+          <div class="stat">
+            <div class="stat-head">
+              <span>O‘quvchilar</span>
+              <span>♟</span>
+            </div>
+            <div class="stat-value">0</div>
+            <div class="stat-note">Faol o‘quvchilar</div>
+          </div>
+
+          <div class="stat">
+            <div class="stat-head">
+              <span>Guruhlar</span>
+              <span>👥</span>
+            </div>
+            <div class="stat-value">0</div>
+            <div class="stat-note">Faol guruhlar</div>
+          </div>
+
+          <div class="stat">
+            <div class="stat-head">
+              <span>Bugungi darslar</span>
+              <span>📚</span>
+            </div>
+            <div class="stat-value">0</div>
+            <div class="stat-note">Rejalashtirilgan</div>
+          </div>
+
+          <div class="stat">
+            <div class="stat-head">
+              <span>Davomat</span>
+              <span>✓</span>
+            </div>
+            <div class="stat-value">0%</div>
+            <div class="stat-note">Bugungi ko‘rsatkich</div>
+          </div>
+
+        </div>
+
+        <div class="grid">
+
+          <div class="card">
+
+            <div class="card-header">
+              <h3>Tezkor boshqaruv</h3>
+              <span>CHESARA</span>
+            </div>
+
+            <div class="quick-grid">
+
+              <button class="quick" onclick="showPanel('students')">
+                <span>♟️</span>
+                <strong>O‘quvchi qo‘shish</strong>
+                <small>Yangi o‘quvchi yaratish</small>
+              </button>
+
+              <button class="quick" onclick="showPanel('groups')">
+                <span>👥</span>
+                <strong>Guruh yaratish</strong>
+                <small>Yangi o‘quvchilar guruhi</small>
+              </button>
+
+              <button class="quick" onclick="showPanel('attendance')">
+                <span>✓</span>
+                <strong>Davomat</strong>
+                <small>Bugungi davomatni ko‘rish</small>
+              </button>
+
+              <button class="quick" onclick="showPanel('analysis')">
+                <span>🧠</span>
+                <strong>O‘yin tahlili</strong>
+                <small>Lichess / Chess.com / Telegram</small>
+              </button>
+
+            </div>
+
+          </div>
+
+          <div class="card">
+
+            <div class="card-header">
+              <h3>Tizim holati</h3>
+              <span id="serverStatus">Tekshirilmoqda...</span>
+            </div>
+
+            <div class="activity">
+              <div class="activity-icon">🖥️</div>
+              <div>
+                <strong>CHESARA Server</strong>
+                <small id="serverText">Ulanish tekshirilmoqda...</small>
+              </div>
+            </div>
+
+            <div class="activity">
+              <div class="activity-icon">🤖</div>
+              <div>
+                <strong>Telegram Bot</strong>
+                <small>Bot tizimi uchun tayyor</small>
+              </div>
+            </div>
+
+            <div class="activity">
+              <div class="activity-icon">🧠</div>
+              <div>
+                <strong>AI Chess Engine</strong>
+                <small>Tahlil moduli tayyorlanmoqda</small>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- STUDENTS -->
+
+      <div id="students" class="panel">
+
+        <div class="card">
+
+          <div class="card-header">
+            <h3>O‘quvchilar</h3>
+            <button class="action-btn">+ O‘quvchi qo‘shish</button>
+          </div>
+
+          <div class="table-wrap">
+
+            <table>
+
+              <thead>
+                <tr>
+                  <th>O‘quvchi</th>
+                  <th>Guruh</th>
+                  <th>Daraja</th>
+                  <th>Davomat</th>
+                  <th>Holat</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                <tr>
+                  <td colspan="5">
+                    <div class="empty">
+                      Hozircha o‘quvchilar qo‘shilmagan.
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+
+            </table>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- TEACHERS -->
+
+      <div id="teachers" class="panel">
+
+        <div class="card">
+
+          <div class="card-header">
+            <h3>Ustozlar</h3>
+            <button class="action-btn">+ Ustoz qo‘shish</button>
+          </div>
+
+          <div class="empty">
+            Ustozlar boshqaruvi shu bo‘limda bo‘ladi.
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- GROUPS -->
+
+      <div id="groups" class="panel">
+
+        <div class="card">
+
+          <div class="card-header">
+            <h3>O‘quvchilar guruhlari</h3>
+            <button class="action-btn">+ Guruh yaratish</button>
+          </div>
+
+          <div class="empty">
+            Hozircha guruhlar mavjud emas.
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- ATTENDANCE -->
+
+      <div id="attendance" class="panel">
+
+        <div class="card">
+
+          <div class="card-header">
+            <h3>Davomat nazorati</h3>
+            <span>Avtomatik nazorat</span>
+          </div>
+
+          <div class="quick-grid">
+
+            <div class="quick">
+              <strong>⏱ 15 daqiqa nazorat</strong>
+              <small>
+                Ustoz dars boshlangandan keyin 15 daqiqa ichida
+                davomat qilmasa tizim direktorga xabar beradi.
+              </small>
+            </div>
+
+            <div class="quick">
+              <strong>🔔 Avtomatik ogohlantirish</strong>
+              <small>
+                Davomat yoki dars faoliyati bajarilmasa Telegram orqali
+                tegishli foydalanuvchiga xabar yuboriladi.
+              </small>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- LESSONS -->
+
+      <div id="lessons" class="panel">
+
+        <div class="card">
+
+          <div class="card-header">
+            <h3>Darslar</h3>
+            <button class="action-btn">+ Dars yaratish</button>
+          </div>
+
+          <div class="empty">
+            Dars jadvali va jonli dars boshqaruvi shu yerda bo‘ladi.
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- ANALYSIS -->
+
+      <div id="analysis" class="panel">
+
+        <div class="card">
+
+          <div class="card-header">
+            <h3>🧠 AI O‘yin tahlili</h3>
+            <span>CHESARA Chess Intelligence</span>
+          </div>
+
+          <div class="quick-grid">
+
+            <div class="quick">
+              <strong>♟ Lichess</strong>
+              <small>O‘yinlarni import qilish va chuqur tahlil.</small>
+            </div>
+
+            <div class="quick">
+              <strong>♟ Chess.com</strong>
+              <small>??, !?, ! va aniqlik ko‘rsatkichlari.</small>
+            </div>
+
+            <div class="quick">
+              <strong>📸 Screenshot tahlili</strong>
+              <small>Telegramga yuborilgan shaxmat rasmini tahlil qilish.</small>
+            </div>
+
+            <div class="quick">
+              <strong>🧠 O‘yinchi uslubi</strong>
+              <small>Hujumkor, himoyaviy va individual opening profili.</small>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- TOURNAMENTS -->
+
+      <div id="tournaments" class="panel">
+
+        <div class="card">
+
+          <div class="card-header">
+            <h3>🏆 Turnirlar</h3>
+            <button class="action-btn">+ Turnir qo‘shish</button>
+          </div>
+
+          <div class="empty">
+            Turnirlar, natijalar, reytinglar va tayyorgarlik tizimi shu yerda.
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- NEWS -->
+
+      <div id="news" class="panel">
+
+        <div class="card">
+
+          <div class="card-header">
+            <h3>📰 Shaxmat yangiliklari</h3>
+            <button class="action-btn">+ Yangilik qo‘shish</button>
+          </div>
+
+          <div class="empty">
+            Turnirlar, natijalar, strimlar va shaxmat yangiliklari.
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- REPORTS -->
+
+      <div id="reports" class="panel">
+
+        <div class="card">
+
+          <div class="card-header">
+            <h3>📊 Hisobotlar</h3>
+            <span>Oylik statistika</span>
+          </div>
+
+          <div class="quick-grid">
+
+            <div class="quick">
+              <strong>📅 Oylik hisobot</strong>
+              <small>
+                Masalan: 1-sentabrdan 30-sentabrgacha
+                o‘quvchining darslari va davomatini hisoblash.
+              </small>
+            </div>
+
+            <div class="quick">
+              <strong>♟ O‘quvchi progressi</strong>
+              <small>
+                O‘yinlar, xatolar, aniqlik va rivojlanish dinamikasi.
+              </small>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- ALERTS -->
+
+      <div id="alerts" class="panel">
+
+        <div class="card">
+
+          <div class="card-header">
+            <h3>🔔 Ogohlantirishlar</h3>
+            <span>Avtomatik nazorat</span>
+          </div>
+
+          <div class="empty">
+            Hozircha yangi ogohlantirishlar yo‘q.
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- SETTINGS -->
+
+      <div id="settings" class="panel">
+
+        <div class="card">
+
+          <div class="card-header">
+            <h3>⚙ Sozlamalar</h3>
+          </div>
+
+          <div class="quick-grid">
+
+            <div class="quick">
+              <strong>Telegram Bot</strong>
+              <small>Bot ulanishi va xabarlar.</small>
+            </div>
+
+            <div class="quick">
+              <strong>AI tizim</strong>
+              <small>Shaxmat tahlili sozlamalari.</small>
+            </div>
+
+            <div class="quick">
+              <strong>Davomat</strong>
+              <small>15 daqiqalik nazorat va ogohlantirishlar.</small>
+            </div>
+
+            <div class="quick">
+              <strong>Super Admin</strong>
+              <small>Faqat administrator ko‘radigan boshqaruv.</small>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+</div>
+
+
+<script>
+
+  const panelNames = {
+    dashboard: ["Boshqaruv paneli", "CHESARA markazining umumiy holati"],
+    students: ["O‘quvchilar", "O‘quvchilar boshqaruvi"],
+    teachers: ["Ustozlar", "Ustozlar boshqaruvi"],
+    groups: ["Guruhlar", "O‘quvchilar guruhlari"],
+    attendance: ["Davomat", "Davomat va avtomatik nazorat"],
+    lessons: ["Darslar", "Dars jadvali va jonli darslar"],
+    analysis: ["O‘yin tahlili", "AI Chess Intelligence"],
+    tournaments: ["Turnirlar", "Turnirlar va natijalar"],
+    news: ["Yangiliklar", "Shaxmat yangiliklari va strimlar"],
+    reports: ["Hisobotlar", "Oylik va o‘quvchi hisobotlari"],
+    alerts: ["Ogohlantirishlar", "Avtomatik xabarlar"],
+    settings: ["Sozlamalar", "CHESARA tizim sozlamalari"]
+  };
+
+
+  function showPanel(id, button) {
+
+    document.querySelectorAll(".panel").forEach(panel => {
+      panel.classList.remove("active");
+    });
+
+    const target = document.getElementById(id);
+
+    if (target) {
+      target.classList.add("active");
+    }
+
+    document.querySelectorAll(".menu button").forEach(btn => {
+      btn.classList.remove("active");
+    });
+
+    if (button) {
+      button.classList.add("active");
+    }
+
+    const info = panelNames[id];
+
+    if (info) {
+      document.getElementById("pageTitle").textContent = info[0];
+      document.getElementById("pageSubtitle").textContent = info[1];
+    }
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth"
+    });
+  }
+
+
+  async function checkServer() {
+
+    const status = document.getElementById("serverStatus");
+    const text = document.getElementById("serverText");
+
+    status.textContent = "Tekshirilmoqda...";
+    text.textContent = "Server bilan aloqa qilinmoqda...";
+
+    try {
+
+      const response = await fetch("/api/health");
+
+      const data = await response.json();
+
+      if (data.success) {
+
+        status.textContent = "Online";
+        status.style.color = "#16a34a";
+
+        text.textContent = "CHESARA server faol ishlayapti.";
+
+      } else {
+
+        status.textContent = "Xatolik";
+        status.style.color = "#dc2626";
+
+      }
+
+    } catch (error) {
+
+      status.textContent = "Offline";
+      status.style.color = "#dc2626";
+
+      text.textContent = "Server bilan aloqa yo‘q.";
+
+    }
+  }
+
+
+  document.addEventListener("DOMContentLoaded", () => {
+
+    checkServer();
+
+  });
+
+</script>
+
 </body>
 </html>
