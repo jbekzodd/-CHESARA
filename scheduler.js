@@ -1,228 +1,131 @@
-// CHESARA — Dars nazorati va avtomatik ogohlantirish tizimi
+const cron = require("node-cron");
 
-const fs = require("fs");
-const path = require("path");
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-const DATA_DIR = path.join(__dirname, "data");
-const SCHEDULE_FILE = path.join(DATA_DIR, "schedule.json");
+// Direktor va ustozlar uchun keyinchalik DB orqali almashtiramiz
+const DIRECTOR_CHAT_ID = process.env.DIRECTOR_CHAT_ID;
 
-function ensureDataFolder() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-
-  if (!fs.existsSync(SCHEDULE_FILE)) {
-    fs.writeFileSync(
-      SCHEDULE_FILE,
-      JSON.stringify({ lessons: [] }, null, 2)
-    );
-  }
-}
-
-function loadSchedule() {
-  ensureDataFolder();
-
-  try {
-    return JSON.parse(
-      fs.readFileSync(SCHEDULE_FILE, "utf8")
-    );
-  } catch (error) {
-    console.error("Jadvalni o'qishda xato:", error.message);
-    return { lessons: [] };
-  }
-}
-
-function saveSchedule(data) {
-  ensureDataFolder();
-
-  fs.writeFileSync(
-    SCHEDULE_FILE,
-    JSON.stringify(data, null, 2)
-  );
-}
+const lessons = new Map();
 
 /*
-  Dars namunasi:
-
+  Darsni ro‘yxatga olish
+  lessonId:
   {
-    id: "lesson_001",
-    groupId: "group_001",
-    groupName: "Boshlang'ich A",
-    coachId: "coach_001",
-    coachName: "Aliyev Ali",
-    directorTelegramId: "123456789",
-    startTime: "2026-08-20T15:00:00+05:00",
-    durationMinutes: 90,
-    attendanceTaken: false,
-    warningSent: false,
-    finished: false
+    teacherId,
+    groupName,
+    startTime,
+    attendanceDone
   }
 */
-
-function addLesson(lesson) {
-  const data = loadSchedule();
-
-  data.lessons.push({
-    ...lesson,
-    attendanceTaken: false,
+function createLesson(lessonId, data) {
+  lessons.set(lessonId, {
+    ...data,
+    attendanceDone: false,
     warningSent: false,
-    finished: false,
-    createdAt: new Date().toISOString()
+    createdAt: Date.now()
   });
 
-  saveSchedule(data);
-
-  return lesson;
-}
-
-function markAttendance(lessonId) {
-  const data = loadSchedule();
-
-  const lesson = data.lessons.find(
-    item => item.id === lessonId
-  );
-
-  if (!lesson) {
-    return {
-      success: false,
-      message: "Dars topilmadi."
-    };
-  }
-
-  lesson.attendanceTaken = true;
-  lesson.attendanceTakenAt = new Date().toISOString();
-
-  saveSchedule(data);
-
-  return {
-    success: true,
-    lesson
-  };
-}
-
-function getLessons() {
-  return loadSchedule().lessons;
-}
-
-function getLesson(lessonId) {
-  return getLessons().find(
-    lesson => lesson.id === lessonId
-  );
+  console.log(`📚 Dars yaratildi: ${lessonId}`);
 }
 
 /*
-  Eng muhim qism:
-
-  Dars boshlanganidan 15 daqiqa o'tib,
-  ustoz davomat qilmagan bo'lsa,
-  shu dars "warning" holatiga o'tadi.
-
-  Telegramga yuborish funksiyasini bot.js bilan
-  keyingi bosqichda bog'laymiz.
+  Davomat bajarildi
 */
-
-function checkAttendanceWarnings() {
-  const data = loadSchedule();
-
-  const now = Date.now();
-  const warnings = [];
-
-  data.lessons.forEach(lesson => {
-    if (
-      lesson.finished ||
-      lesson.attendanceTaken ||
-      lesson.warningSent
-    ) {
-      return;
-    }
-
-    const startTime = new Date(lesson.startTime).getTime();
-
-    if (Number.isNaN(startTime)) {
-      return;
-    }
-
-    const minutesPassed =
-      (now - startTime) / (1000 * 60);
-
-    if (minutesPassed >= 15) {
-      lesson.warningSent = true;
-      lesson.warningCreatedAt =
-        new Date().toISOString();
-
-      warnings.push({
-        lessonId: lesson.id,
-        coachId: lesson.coachId,
-        coachName: lesson.coachName,
-        directorTelegramId:
-          lesson.directorTelegramId,
-        groupName: lesson.groupName,
-        message:
-          `🚨 CHESARA ogohlantirishi\n\n` +
-          `Guruh: ${lesson.groupName}\n` +
-          `Ustoz: ${lesson.coachName}\n\n` +
-          `Dars boshlanganiga 15 daqiqadan oshdi, ` +
-          `ammo davomat hali qilinmagan.`
-      });
-    }
-  });
-
-  saveSchedule(data);
-
-  return warnings;
-}
-
-function finishLesson(lessonId) {
-  const data = loadSchedule();
-
-  const lesson = data.lessons.find(
-    item => item.id === lessonId
-  );
+function markAttendance(lessonId) {
+  const lesson = lessons.get(lessonId);
 
   if (!lesson) {
+    console.log(`⚠️ Dars topilmadi: ${lessonId}`);
     return false;
   }
 
-  lesson.finished = true;
-  lesson.finishedAt = new Date().toISOString();
+  lesson.attendanceDone = true;
 
-  saveSchedule(data);
+  console.log(`✅ Davomat qilindi: ${lessonId}`);
 
   return true;
 }
 
-function startScheduler(onWarning) {
-  console.log(
-    "⏰ CHESARA dars nazorati ishga tushdi."
-  );
+/*
+  Telegram xabar yuborish
+*/
+async function sendTelegramMessage(chatId, text) {
+  if (!TELEGRAM_BOT_TOKEN || !chatId) {
+    console.log("⚠️ Telegram sozlamalari to‘liq emas.");
+    return;
+  }
 
-  // Har 1 daqiqada tekshiradi.
-  setInterval(() => {
-    const warnings = checkAttendanceWarnings();
-
-    if (warnings.length === 0) {
-      return;
-    }
-
-    warnings.forEach(warning => {
-      console.log(
-        "🚨 DAVOMAT OGOHLANTIRISHI:",
-        warning.message
-      );
-
-      if (typeof onWarning === "function") {
-        onWarning(warning);
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          parse_mode: "HTML"
+        })
       }
-    });
-  }, 60 * 1000);
+    );
+
+    const result = await response.json();
+
+    if (!result.ok) {
+      console.error("❌ Telegram xatosi:", result);
+    }
+  } catch (error) {
+    console.error("❌ Telegramga xabar yuborishda xato:", error.message);
+  }
 }
 
+/*
+  Har daqiqada darslarni tekshiramiz.
+
+  Agar dars boshlanganidan 15 daqiqa o'tib,
+  davomat qilinmagan bo‘lsa,
+  direktorga xabar yuboriladi.
+*/
+cron.schedule("* * * * *", async () => {
+  const now = Date.now();
+
+  for (const [lessonId, lesson] of lessons.entries()) {
+    if (lesson.attendanceDone) continue;
+    if (lesson.warningSent) continue;
+
+    const elapsedMinutes =
+      (now - lesson.createdAt) / 1000 / 60;
+
+    if (elapsedMinutes >= 15) {
+      lesson.warningSent = true;
+
+      const message =
+        `🚨 <b>CHESARA — Davomat ogohlantirishi</b>\n\n` +
+        `📚 Guruh: <b>${lesson.groupName || "Noma'lum"}</b>\n` +
+        `👨‍🏫 Ustoz: <b>${lesson.teacherName || "Noma'lum"}</b>\n\n` +
+        `⏰ Dars boshlanganiga 15 daqiqa bo‘ldi.\n` +
+        `❌ Davomat hali qayd qilinmagan.\n\n` +
+        `🔔 Iltimos, holatni tekshiring.`;
+
+      await sendTelegramMessage(
+        DIRECTOR_CHAT_ID,
+        message
+      );
+
+      console.log(
+        `🚨 Direktor ogohlantirildi: ${lessonId}`
+      );
+    }
+  }
+});
+
+console.log("⏰ CHESARA dars nazorati ishga tushdi.");
+
 module.exports = {
-  addLesson,
-  getLessons,
-  getLesson,
+  createLesson,
   markAttendance,
-  finishLesson,
-  checkAttendanceWarnings,
-  startScheduler
+  sendTelegramMessage,
+  lessons
 };
