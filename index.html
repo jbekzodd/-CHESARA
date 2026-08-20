@@ -2,1189 +2,1293 @@
 <html lang="uz">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
 
   <title>CHESARA — AI Chess Platform</title>
 
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      font-family: Inter, Arial, sans-serif;
-      background: #f5f7fb;
-      color: #172033;
-      min-height: 100vh;
-    }
-
-    button,
-    input,
-    select {
-      font: inherit;
-    }
-
-    button {
-      cursor: pointer;
-    }
-
-    .app {
-      display: flex;
-      min-height: 100vh;
-    }
-
-    /* SIDEBAR */
-
-    .sidebar {
-      width: 260px;
-      background: #111827;
-      color: white;
-      padding: 22px 16px;
-      position: fixed;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      overflow-y: auto;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      padding: 8px 10px 25px;
-    }
-
-    .brand-logo {
-      width: 43px;
-      height: 43px;
-      border-radius: 13px;
-      display: grid;
-      place-items: center;
-      background: #ffffff;
-      color: #111827;
-      font-size: 25px;
-    }
-
-    .brand-text strong {
-      display: block;
-      font-size: 21px;
-      letter-spacing: 1px;
-    }
-
-    .brand-text span {
-      display: block;
-      color: #9ca3af;
-      font-size: 11px;
-      margin-top: 2px;
-    }
-
-    .menu-title {
-      color: #6b7280;
-      font-size: 11px;
-      text-transform: uppercase;
-      padding: 18px 12px 8px;
-      letter-spacing: .8px;
-    }
-
-    .menu button {
-      width: 100%;
-      border: 0;
-      background: transparent;
-      color: #d1d5db;
-      padding: 12px;
-      border-radius: 10px;
-      text-align: left;
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      margin-bottom: 3px;
-      transition: .2s;
-    }
-
-    .menu button:hover,
-    .menu button.active {
-      background: #273449;
-      color: white;
-    }
-
-    .menu-icon {
-      width: 25px;
-      text-align: center;
-      font-size: 17px;
-    }
-
-    .sidebar-bottom {
-      margin-top: 25px;
-      padding: 14px;
-      border-radius: 12px;
-      background: #1f2937;
-    }
-
-    .status-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      background: #22c55e;
-      border-radius: 50%;
-      margin-right: 6px;
-    }
-
-    .sidebar-bottom small {
-      color: #9ca3af;
-    }
-
-    /* MAIN */
-
-    .main {
-      margin-left: 260px;
-      width: calc(100% - 260px);
-      min-height: 100vh;
-    }
-
-    .topbar {
-      height: 72px;
-      background: white;
-      border-bottom: 1px solid #e5e7eb;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 30px;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-    }
-
-    .page-title h1 {
-      font-size: 22px;
-    }
-
-    .page-title p {
-      font-size: 12px;
-      color: #6b7280;
-      margin-top: 3px;
-    }
-
-    .top-actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .icon-btn {
-      width: 40px;
-      height: 40px;
-      border: 1px solid #e5e7eb;
-      border-radius: 10px;
-      background: white;
-    }
-
-    .profile {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding-left: 8px;
-    }
-
-    .avatar {
-      width: 38px;
-      height: 38px;
-      border-radius: 50%;
-      background: #111827;
-      color: white;
-      display: grid;
-      place-items: center;
-      font-weight: bold;
-    }
-
-    .profile small {
-      color: #6b7280;
-      display: block;
-    }
-
-    /* CONTENT */
-
-    .content {
-      padding: 30px;
-    }
-
-    .welcome {
-      background: linear-gradient(135deg, #111827, #293548);
-      color: white;
-      border-radius: 18px;
-      padding: 28px;
-      margin-bottom: 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      overflow: hidden;
-    }
-
-    .welcome h2 {
-      font-size: 27px;
-      margin-bottom: 8px;
-    }
-
-    .welcome p {
-      color: #cbd5e1;
-      max-width: 650px;
-      line-height: 1.5;
-    }
-
-    .welcome-chess {
-      font-size: 85px;
-      opacity: .9;
-      padding-right: 25px;
-    }
-
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-
-    .stat {
-      background: white;
-      border: 1px solid #e5e7eb;
-      border-radius: 15px;
-      padding: 20px;
-    }
-
-    .stat-head {
-      display: flex;
-      justify-content: space-between;
-      color: #6b7280;
-      font-size: 13px;
-    }
-
-    .stat-value {
-      font-size: 29px;
-      font-weight: 700;
-      margin-top: 11px;
-    }
-
-    .stat-note {
-      font-size: 11px;
-      color: #22a35a;
-      margin-top: 6px;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 1.6fr 1fr;
-      gap: 20px;
-    }
-
-    .card {
-      background: white;
-      border: 1px solid #e5e7eb;
-      border-radius: 15px;
-      padding: 20px;
-    }
-
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 18px;
-    }
-
-    .card-header h3 {
-      font-size: 17px;
-    }
-
-    .card-header span {
-      font-size: 12px;
-      color: #6b7280;
-    }
-
-    .quick-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-    }
-
-    .quick {
-      border: 1px solid #e5e7eb;
-      background: #fafafa;
-      border-radius: 12px;
-      padding: 15px;
-      text-align: left;
-      transition: .2s;
-    }
-
-    .quick:hover {
-      border-color: #9ca3af;
-      transform: translateY(-1px);
-    }
-
-    .quick strong {
-      display: block;
-      margin-top: 8px;
-    }
-
-    .quick small {
-      color: #6b7280;
-      display: block;
-      margin-top: 4px;
-    }
-
-    .activity {
-      display: flex;
-      gap: 12px;
-      padding: 12px 0;
-      border-bottom: 1px solid #f0f0f0;
-    }
-
-    .activity:last-child {
-      border-bottom: 0;
-    }
-
-    .activity-icon {
-      width: 35px;
-      height: 35px;
-      border-radius: 9px;
-      background: #f3f4f6;
-      display: grid;
-      place-items: center;
-    }
-
-    .activity strong {
-      font-size: 13px;
-    }
-
-    .activity small {
-      display: block;
-      color: #6b7280;
-      margin-top: 3px;
-    }
-
-    /* PANELS */
-
-    .panel {
-      display: none;
-    }
-
-    .panel.active {
-      display: block;
-    }
-
-    .table-wrap {
-      overflow-x: auto;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    th,
-    td {
-      text-align: left;
-      padding: 13px;
-      border-bottom: 1px solid #edf0f3;
-      font-size: 13px;
-    }
-
-    th {
-      color: #6b7280;
-      font-size: 11px;
-      text-transform: uppercase;
-    }
-
-    .badge {
-      padding: 5px 9px;
-      border-radius: 20px;
-      font-size: 11px;
-      display: inline-block;
-    }
-
-    .badge.green {
-      background: #dcfce7;
-      color: #166534;
-    }
-
-    .badge.yellow {
-      background: #fef3c7;
-      color: #92400e;
-    }
-
-    .badge.red {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-
-    .action-btn {
-      border: 0;
-      background: #111827;
-      color: white;
-      padding: 9px 13px;
-      border-radius: 8px;
-      font-size: 12px;
-    }
-
-    .action-btn.light {
-      background: #f3f4f6;
-      color: #111827;
-    }
-
-    .empty {
-      text-align: center;
-      padding: 45px 20px;
-      color: #6b7280;
-    }
-
-    /* MOBILE */
-
-    .mobile-menu {
-      display: none;
-    }
-
-    @media (max-width: 1000px) {
-      .stats {
-        grid-template-columns: repeat(2, 1fr);
-      }
-
-      .grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    @media (max-width: 720px) {
-      .sidebar {
-        display: none;
-      }
-
-      .main {
-        margin-left: 0;
-        width: 100%;
-      }
-
-      .mobile-menu {
-        display: block;
-      }
-
-      .content {
-        padding: 18px;
-      }
-
-      .topbar {
-        padding: 0 15px;
-      }
-
-      .welcome-chess {
-        display: none;
-      }
-
-      .stats {
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-      }
-
-      .stat {
-        padding: 14px;
-      }
-
-      .stat-value {
-        font-size: 23px;
-      }
-    }
-  </style>
+  <meta
+    name="description"
+    content="CHESARA — shaxmat markazlari, ustozlar va o‘quvchilar uchun aqlli boshqaruv platformasi."
+  >
+
+  <link rel="stylesheet" href="/style.css">
 </head>
 
 <body>
 
-<div class="app">
+  <!-- =====================================================
+       MOBILE OVERLAY
+  ====================================================== -->
 
-  <!-- SIDEBAR -->
+  <div
+    class="sidebar-overlay"
+    data-sidebar-overlay
+  ></div>
 
-  <aside class="sidebar">
+
+  <!-- =====================================================
+       SIDEBAR
+  ====================================================== -->
+
+  <aside
+    class="sidebar"
+    data-sidebar
+  >
 
     <div class="brand">
-      <div class="brand-logo">♟</div>
+
+      <div class="brand-logo">
+        ♟
+      </div>
 
       <div class="brand-text">
         <strong>CHESARA</strong>
         <span>AI CHESS PLATFORM</span>
       </div>
+
     </div>
 
-    <div class="menu-title">Asosiy</div>
 
-    <nav class="menu">
+    <nav class="sidebar-nav">
 
-      <button class="active" onclick="showPanel('dashboard', this)">
-        <span class="menu-icon">⌂</span>
-        Boshqaruv paneli
-      </button>
+      <!-- MAIN -->
 
-      <button onclick="showPanel('students', this)">
-        <span class="menu-icon">♟</span>
-        O‘quvchilar
-      </button>
+      <div class="nav-section">
 
-      <button onclick="showPanel('teachers', this)">
-        <span class="menu-icon">♜</span>
-        Ustozlar
-      </button>
+        <div class="nav-label">
+          ASOSIY
+        </div>
 
-      <button onclick="showPanel('groups', this)">
-        <span class="menu-icon">👥</span>
-        Guruhlar
-      </button>
+        <a
+          href="/"
+          class="nav-item active"
+          data-page="dashboard"
+        >
+          <span class="nav-icon">⌂</span>
+          <span>Boshqaruv paneli</span>
+        </a>
 
-      <button onclick="showPanel('attendance', this)">
-        <span class="menu-icon">✓</span>
-        Davomat
-      </button>
+        <a
+          href="?page=students"
+          class="nav-item"
+          data-page="students"
+        >
+          <span class="nav-icon">♟</span>
+          <span>O‘quvchilar</span>
+        </a>
 
-      <button onclick="showPanel('lessons', this)">
-        <span class="menu-icon">📚</span>
-        Darslar
-      </button>
+        <a
+          href="?page=teachers"
+          class="nav-item"
+          data-page="teachers"
+        >
+          <span class="nav-icon">♜</span>
+          <span>Ustozlar</span>
+        </a>
 
-    </nav>
+        <a
+          href="?page=groups"
+          class="nav-item"
+          data-page="groups"
+        >
+          <span class="nav-icon">👥</span>
+          <span>Guruhlar</span>
+        </a>
 
-    <div class="menu-title">AI Shaxmat</div>
+        <a
+          href="?page=attendance"
+          class="nav-item"
+          data-page="attendance"
+        >
+          <span class="nav-icon">✓</span>
+          <span>Davomat</span>
+        </a>
 
-    <nav class="menu">
+        <a
+          href="?page=lessons"
+          class="nav-item"
+          data-page="lessons"
+        >
+          <span class="nav-icon">📚</span>
+          <span>Darslar</span>
+        </a>
 
-      <button onclick="showPanel('analysis', this)">
-        <span class="menu-icon">🧠</span>
-        O‘yin tahlili
-      </button>
-
-      <button onclick="showPanel('tournaments', this)">
-        <span class="menu-icon">🏆</span>
-        Turnirlar
-      </button>
-
-      <button onclick="showPanel('news', this)">
-        <span class="menu-icon">📰</span>
-        Yangiliklar
-      </button>
-
-    </nav>
-
-    <div class="menu-title">Boshqaruv</div>
-
-    <nav class="menu">
-
-      <button onclick="showPanel('reports', this)">
-        <span class="menu-icon">📊</span>
-        Hisobotlar
-      </button>
-
-      <button onclick="showPanel('alerts', this)">
-        <span class="menu-icon">🔔</span>
-        Ogohlantirishlar
-      </button>
-
-      <button onclick="showPanel('settings', this)">
-        <span class="menu-icon">⚙</span>
-        Sozlamalar
-      </button>
-
-    </nav>
-
-    <div class="sidebar-bottom">
-      <div>
-        <span class="status-dot"></span>
-        <strong>CHESARA Online</strong>
       </div>
-      <small>AI tizim faol</small>
+
+
+      <!-- AI CHESS -->
+
+      <div class="nav-section">
+
+        <div class="nav-label">
+          AI SHAXMAT
+        </div>
+
+        <a
+          href="?page=analysis"
+          class="nav-item"
+          data-page="analysis"
+        >
+          <span class="nav-icon">🧠</span>
+          <span>O‘yin tahlili</span>
+        </a>
+
+        <a
+          href="?page=tournaments"
+          class="nav-item"
+          data-page="tournaments"
+        >
+          <span class="nav-icon">🏆</span>
+          <span>Turnirlar</span>
+        </a>
+
+        <a
+          href="?page=news"
+          class="nav-item"
+          data-page="news"
+        >
+          <span class="nav-icon">📰</span>
+          <span>Yangiliklar</span>
+        </a>
+
+      </div>
+
+
+      <!-- MANAGEMENT -->
+
+      <div class="nav-section">
+
+        <div class="nav-label">
+          BOSHQARUV
+        </div>
+
+        <a
+          href="?page=reports"
+          class="nav-item"
+          data-page="reports"
+        >
+          <span class="nav-icon">📊</span>
+          <span>Hisobotlar</span>
+        </a>
+
+        <a
+          href="?page=alerts"
+          class="nav-item"
+          data-page="alerts"
+        >
+          <span class="nav-icon">🔔</span>
+          <span>Ogohlantirishlar</span>
+        </a>
+
+        <a
+          href="?page=settings"
+          class="nav-item"
+          data-page="settings"
+        >
+          <span class="nav-icon">⚙</span>
+          <span>Sozlamalar</span>
+        </a>
+
+      </div>
+
+    </nav>
+
+
+    <!-- SIDEBAR FOOTER -->
+
+    <div class="sidebar-footer">
+
+      <div class="system-status">
+
+        <span class="status-dot"></span>
+
+        <div>
+          <strong>CHESARA Online</strong>
+          <small>AI tizim faol</small>
+        </div>
+
+      </div>
+
     </div>
 
   </aside>
 
-  <!-- MAIN -->
 
-  <main class="main">
+  <!-- =====================================================
+       MAIN
+  ====================================================== -->
+
+  <main class="main-content">
+
+
+    <!-- ===================================================
+         HEADER
+    ==================================================== -->
 
     <header class="topbar">
 
-      <div class="page-title">
-        <h1 id="pageTitle">Boshqaruv paneli</h1>
-        <p id="pageSubtitle">CHESARA markazining umumiy holati</p>
-      </div>
+      <div class="topbar-left">
 
-      <div class="top-actions">
-
-        <button class="icon-btn" onclick="checkServer()" title="Server holati">
-          ●
+        <button
+          type="button"
+          class="mobile-menu-button"
+          data-mobile-menu
+          aria-label="Menyuni ochish"
+        >
+          ☰
         </button>
 
+        <div class="page-heading">
+
+          <span class="page-overline">
+            CHESARA INTELLIGENCE
+          </span>
+
+          <h1 data-page-title>
+            Boshqaruv paneli
+          </h1>
+
+        </div>
+
+      </div>
+
+
+      <div class="topbar-right">
+
+        <button
+          type="button"
+          class="icon-button"
+          data-action="refresh"
+          title="Yangilash"
+          aria-label="Yangilash"
+        >
+          ↻
+        </button>
+
+        <button
+          type="button"
+          class="notification-button"
+          data-page="alerts"
+          title="Ogohlantirishlar"
+          aria-label="Ogohlantirishlar"
+        >
+          🔔
+          <span class="notification-badge">
+            0
+          </span>
+        </button>
+
+
         <div class="profile">
-          <div class="avatar">SA</div>
-          <div>
-            <strong>Super Admin</strong>
-            <small>Administrator</small>
+
+          <div class="profile-avatar">
+            SA
           </div>
+
+          <div class="profile-info">
+            <strong>Administrator</strong>
+            <span>Super Admin</span>
+          </div>
+
         </div>
 
       </div>
 
     </header>
 
+
+    <!-- ===================================================
+         CONTENT
+    ==================================================== -->
+
     <section class="content">
 
-      <!-- DASHBOARD -->
 
-      <div id="dashboard" class="panel active">
+      <!-- =================================================
+           DASHBOARD
+      ================================================== -->
 
-        <div class="welcome">
+      <div
+        class="page-view active"
+        data-page-view="dashboard"
+      >
+
+        <div class="welcome-section">
 
           <div>
-            <h2>CHESARA'ga xush kelibsiz ♟️</h2>
+
+            <span class="section-overline">
+              Xush kelibsiz
+            </span>
+
+            <h2>
+              CHESARA boshqaruv markazi
+            </h2>
 
             <p>
-              Shaxmat markazingizni bitta aqlli tizim orqali boshqaring.
-              O‘quvchilar, ustozlar, davomat, darslar, hisobotlar,
-              turnirlar va AI o‘yin tahlili bir joyda.
+              O‘quvchilar, ustozlar, darslar,
+              davomat va shaxmat tahlilini
+              yagona tizim orqali boshqaring.
             </p>
+
           </div>
 
-          <div class="welcome-chess">♞</div>
+          <div class="welcome-actions">
+
+            <button
+              class="primary-button"
+              type="button"
+              data-action="open-analysis"
+            >
+              🧠 O‘yin tahlili
+            </button>
+
+            <button
+              class="secondary-button"
+              type="button"
+              data-action="open-reports"
+            >
+              📊 Hisobotlar
+            </button>
+
+          </div>
 
         </div>
 
-        <div class="stats">
 
-          <div class="stat">
-            <div class="stat-head">
+        <!-- STATISTICS -->
+
+        <div class="stats-grid">
+
+          <div class="stat-card">
+
+            <div class="stat-icon">
+              ♟
+            </div>
+
+            <div>
               <span>O‘quvchilar</span>
-              <span>♟</span>
+              <strong data-stat="students">
+                0
+              </strong>
             </div>
-            <div class="stat-value">0</div>
-            <div class="stat-note">Faol o‘quvchilar</div>
+
           </div>
 
-          <div class="stat">
-            <div class="stat-head">
+
+          <div class="stat-card">
+
+            <div class="stat-icon">
+              ♜
+            </div>
+
+            <div>
+              <span>Ustozlar</span>
+              <strong data-stat="teachers">
+                0
+              </strong>
+            </div>
+
+          </div>
+
+
+          <div class="stat-card">
+
+            <div class="stat-icon">
+              👥
+            </div>
+
+            <div>
               <span>Guruhlar</span>
+              <strong data-stat="groups">
+                0
+              </strong>
+            </div>
+
+          </div>
+
+
+          <div class="stat-card">
+
+            <div class="stat-icon">
+              🔔
+            </div>
+
+            <div>
+              <span>Ogohlantirishlar</span>
+              <strong data-stat="alerts">
+                0
+              </strong>
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <!-- ATTENDANCE -->
+
+        <div class="dashboard-grid">
+
+          <section class="panel">
+
+            <div class="panel-header">
+
+              <div>
+                <span class="section-overline">
+                  BUGUN
+                </span>
+
+                <h3>
+                  Davomat holati
+                </h3>
+              </div>
+
+              <button
+                type="button"
+                class="text-button"
+                data-action="open-attendance"
+              >
+                Batafsil →
+              </button>
+
+            </div>
+
+
+            <div class="attendance-summary">
+
+              <div class="attendance-item present">
+
+                <span class="attendance-number"
+                  data-stat="present">
+                  0
+                </span>
+
+                <span>
+                  Kelgan
+                </span>
+
+              </div>
+
+
+              <div class="attendance-item late">
+
+                <span class="attendance-number"
+                  data-stat="late">
+                  0
+                </span>
+
+                <span>
+                  Kechikkan
+                </span>
+
+              </div>
+
+
+              <div class="attendance-item absent">
+
+                <span class="attendance-number"
+                  data-stat="absent">
+                  0
+                </span>
+
+                <span>
+                  Kelmagan
+                </span>
+
+              </div>
+
+            </div>
+
+          </section>
+
+
+          <!-- SYSTEM -->
+
+          <section class="panel">
+
+            <div class="panel-header">
+
+              <div>
+                <span class="section-overline">
+                  TIZIM
+                </span>
+
+                <h3>
+                  CHESARA holati
+                </h3>
+              </div>
+
+              <span class="live-badge">
+                ● LIVE
+              </span>
+
+            </div>
+
+
+            <div class="system-list">
+
+              <div class="system-row">
+
+                <span>
+                  🌐 Platforma
+                </span>
+
+                <strong class="online">
+                  Online
+                </strong>
+
+              </div>
+
+
+              <div class="system-row">
+
+                <span>
+                  🤖 Telegram bot
+                </span>
+
+                <strong class="online">
+                  Online
+                </strong>
+
+              </div>
+
+
+              <div class="system-row">
+
+                <span>
+                  🧠 AI Intelligence
+                </span>
+
+                <strong class="online">
+                  Ready
+                </strong>
+
+              </div>
+
+
+              <div class="system-row">
+
+                <span>
+                  🔔 Monitoring
+                </span>
+
+                <strong class="online">
+                  Active
+                </strong>
+
+              </div>
+
+            </div>
+
+          </section>
+
+        </div>
+
+
+        <!-- QUICK ACTIONS -->
+
+        <section class="panel quick-panel">
+
+          <div class="panel-header">
+
+            <div>
+
+              <span class="section-overline">
+                TEZKOR AMALLAR
+              </span>
+
+              <h3>
+                CHESARA modullari
+              </h3>
+
+            </div>
+
+          </div>
+
+
+          <div class="quick-actions">
+
+            <button
+              type="button"
+              class="quick-action"
+              data-page="students"
+            >
+              <span>♟</span>
+              <strong>O‘quvchilar</strong>
+              <small>Boshqarish</small>
+            </button>
+
+
+            <button
+              type="button"
+              class="quick-action"
+              data-page="teachers"
+            >
+              <span>♜</span>
+              <strong>Ustozlar</strong>
+              <small>Boshqarish</small>
+            </button>
+
+
+            <button
+              type="button"
+              class="quick-action"
+              data-page="groups"
+            >
               <span>👥</span>
-            </div>
-            <div class="stat-value">0</div>
-            <div class="stat-note">Faol guruhlar</div>
-          </div>
+              <strong>Guruhlar</strong>
+              <small>Boshqarish</small>
+            </button>
 
-          <div class="stat">
-            <div class="stat-head">
-              <span>Bugungi darslar</span>
+
+            <button
+              type="button"
+              class="quick-action"
+              data-page="lessons"
+            >
               <span>📚</span>
-            </div>
-            <div class="stat-value">0</div>
-            <div class="stat-note">Rejalashtirilgan</div>
-          </div>
+              <strong>Darslar</strong>
+              <small>Jadval</small>
+            </button>
 
-          <div class="stat">
-            <div class="stat-head">
-              <span>Davomat</span>
+
+            <button
+              type="button"
+              class="quick-action"
+              data-page="attendance"
+            >
               <span>✓</span>
-            </div>
-            <div class="stat-value">0%</div>
-            <div class="stat-note">Bugungi ko‘rsatkich</div>
-          </div>
-
-        </div>
-
-        <div class="grid">
-
-          <div class="card">
-
-            <div class="card-header">
-              <h3>Tezkor boshqaruv</h3>
-              <span>CHESARA</span>
-            </div>
-
-            <div class="quick-grid">
-
-              <button class="quick" onclick="showPanel('students')">
-                <span>♟️</span>
-                <strong>O‘quvchi qo‘shish</strong>
-                <small>Yangi o‘quvchi yaratish</small>
-              </button>
-
-              <button class="quick" onclick="showPanel('groups')">
-                <span>👥</span>
-                <strong>Guruh yaratish</strong>
-                <small>Yangi o‘quvchilar guruhi</small>
-              </button>
-
-              <button class="quick" onclick="showPanel('attendance')">
-                <span>✓</span>
-                <strong>Davomat</strong>
-                <small>Bugungi davomatni ko‘rish</small>
-              </button>
-
-              <button class="quick" onclick="showPanel('analysis')">
-                <span>🧠</span>
-                <strong>O‘yin tahlili</strong>
-                <small>Lichess / Chess.com / Telegram</small>
-              </button>
-
-            </div>
-
-          </div>
-
-          <div class="card">
-
-            <div class="card-header">
-              <h3>Tizim holati</h3>
-              <span id="serverStatus">Tekshirilmoqda...</span>
-            </div>
-
-            <div class="activity">
-              <div class="activity-icon">🖥️</div>
-              <div>
-                <strong>CHESARA Server</strong>
-                <small id="serverText">Ulanish tekshirilmoqda...</small>
-              </div>
-            </div>
-
-            <div class="activity">
-              <div class="activity-icon">🤖</div>
-              <div>
-                <strong>Telegram Bot</strong>
-                <small>Bot tizimi uchun tayyor</small>
-              </div>
-            </div>
-
-            <div class="activity">
-              <div class="activity-icon">🧠</div>
-              <div>
-                <strong>AI Chess Engine</strong>
-                <small>Tahlil moduli tayyorlanmoqda</small>
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- STUDENTS -->
-
-      <div id="students" class="panel">
-
-        <div class="card">
-
-          <div class="card-header">
-            <h3>O‘quvchilar</h3>
-            <button class="action-btn">+ O‘quvchi qo‘shish</button>
-          </div>
-
-          <div class="table-wrap">
-
-            <table>
-
-              <thead>
-                <tr>
-                  <th>O‘quvchi</th>
-                  <th>Guruh</th>
-                  <th>Daraja</th>
-                  <th>Davomat</th>
-                  <th>Holat</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                <tr>
-                  <td colspan="5">
-                    <div class="empty">
-                      Hozircha o‘quvchilar qo‘shilmagan.
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-
-            </table>
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- TEACHERS -->
-
-      <div id="teachers" class="panel">
-
-        <div class="card">
-
-          <div class="card-header">
-            <h3>Ustozlar</h3>
-            <button class="action-btn">+ Ustoz qo‘shish</button>
-          </div>
-
-          <div class="empty">
-            Ustozlar boshqaruvi shu bo‘limda bo‘ladi.
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- GROUPS -->
-
-      <div id="groups" class="panel">
-
-        <div class="card">
-
-          <div class="card-header">
-            <h3>O‘quvchilar guruhlari</h3>
-            <button class="action-btn">+ Guruh yaratish</button>
-          </div>
-
-          <div class="empty">
-            Hozircha guruhlar mavjud emas.
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- ATTENDANCE -->
-
-      <div id="attendance" class="panel">
-
-        <div class="card">
-
-          <div class="card-header">
-            <h3>Davomat nazorati</h3>
-            <span>Avtomatik nazorat</span>
-          </div>
-
-          <div class="quick-grid">
-
-            <div class="quick">
-              <strong>⏱ 15 daqiqa nazorat</strong>
-              <small>
-                Ustoz dars boshlangandan keyin 15 daqiqa ichida
-                davomat qilmasa tizim direktorga xabar beradi.
-              </small>
-            </div>
-
-            <div class="quick">
-              <strong>🔔 Avtomatik ogohlantirish</strong>
-              <small>
-                Davomat yoki dars faoliyati bajarilmasa Telegram orqali
-                tegishli foydalanuvchiga xabar yuboriladi.
-              </small>
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- LESSONS -->
-
-      <div id="lessons" class="panel">
-
-        <div class="card">
-
-          <div class="card-header">
-            <h3>Darslar</h3>
-            <button class="action-btn">+ Dars yaratish</button>
-          </div>
-
-          <div class="empty">
-            Dars jadvali va jonli dars boshqaruvi shu yerda bo‘ladi.
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- ANALYSIS -->
-
-      <div id="analysis" class="panel">
-
-        <div class="card">
-
-          <div class="card-header">
-            <h3>🧠 AI O‘yin tahlili</h3>
-            <span>CHESARA Chess Intelligence</span>
-          </div>
-
-          <div class="quick-grid">
-
-            <div class="quick">
-              <strong>♟ Lichess</strong>
-              <small>O‘yinlarni import qilish va chuqur tahlil.</small>
-            </div>
-
-            <div class="quick">
-              <strong>♟ Chess.com</strong>
-              <small>??, !?, ! va aniqlik ko‘rsatkichlari.</small>
-            </div>
-
-            <div class="quick">
-              <strong>📸 Screenshot tahlili</strong>
-              <small>Telegramga yuborilgan shaxmat rasmini tahlil qilish.</small>
-            </div>
-
-            <div class="quick">
-              <strong>🧠 O‘yinchi uslubi</strong>
-              <small>Hujumkor, himoyaviy va individual opening profili.</small>
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- TOURNAMENTS -->
-
-      <div id="tournaments" class="panel">
-
-        <div class="card">
-
-          <div class="card-header">
-            <h3>🏆 Turnirlar</h3>
-            <button class="action-btn">+ Turnir qo‘shish</button>
-          </div>
-
-          <div class="empty">
-            Turnirlar, natijalar, reytinglar va tayyorgarlik tizimi shu yerda.
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- NEWS -->
-
-      <div id="news" class="panel">
-
-        <div class="card">
-
-          <div class="card-header">
-            <h3>📰 Shaxmat yangiliklari</h3>
-            <button class="action-btn">+ Yangilik qo‘shish</button>
-          </div>
-
-          <div class="empty">
-            Turnirlar, natijalar, strimlar va shaxmat yangiliklari.
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- REPORTS -->
-
-      <div id="reports" class="panel">
-
-        <div class="card">
-
-          <div class="card-header">
-            <h3>📊 Hisobotlar</h3>
-            <span>Oylik statistika</span>
-          </div>
-
-          <div class="quick-grid">
-
-            <div class="quick">
-              <strong>📅 Oylik hisobot</strong>
-              <small>
-                Masalan: 1-sentabrdan 30-sentabrgacha
-                o‘quvchining darslari va davomatini hisoblash.
-              </small>
-            </div>
-
-            <div class="quick">
-              <strong>♟ O‘quvchi progressi</strong>
-              <small>
-                O‘yinlar, xatolar, aniqlik va rivojlanish dinamikasi.
-              </small>
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- ALERTS -->
-
-      <div id="alerts" class="panel">
-
-        <div class="card">
-
-          <div class="card-header">
-            <h3>🔔 Ogohlantirishlar</h3>
-            <span>Avtomatik nazorat</span>
-          </div>
-
-          <div class="empty">
-            Hozircha yangi ogohlantirishlar yo‘q.
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- SETTINGS -->
-
-      <div id="settings" class="panel">
-
-        <div class="card">
-
-          <div class="card-header">
-            <h3>⚙ Sozlamalar</h3>
-          </div>
-
-          <div class="quick-grid">
-
-            <div class="quick">
-              <strong>Telegram Bot</strong>
-              <small>Bot ulanishi va xabarlar.</small>
-            </div>
-
-            <div class="quick">
-              <strong>AI tizim</strong>
-              <small>Shaxmat tahlili sozlamalari.</small>
-            </div>
-
-            <div class="quick">
               <strong>Davomat</strong>
-              <small>15 daqiqalik nazorat va ogohlantirishlar.</small>
-            </div>
+              <small>Nazorat</small>
+            </button>
 
-            <div class="quick">
-              <strong>Super Admin</strong>
-              <small>Faqat administrator ko‘radigan boshqaruv.</small>
-            </div>
+
+            <button
+              type="button"
+              class="quick-action"
+              data-page="analysis"
+            >
+              <span>🧠</span>
+              <strong>AI tahlil</strong>
+              <small>O‘yin tahlili</small>
+            </button>
+
+          </div>
+
+        </section>
+
+      </div>
+
+
+      <!-- =================================================
+           STUDENTS
+      ================================================== -->
+
+      <div
+        class="page-view"
+        data-page-view="students"
+      >
+
+        <div class="empty-module">
+
+          <div class="module-icon">
+            ♟
+          </div>
+
+          <span class="section-overline">
+            STUDENT MANAGEMENT
+          </span>
+
+          <h2>
+            O‘quvchilar
+          </h2>
+
+          <p>
+            O‘quvchilar profili, reytingi,
+            davomat va rivojlanish ko‘rsatkichlari
+            shu bo‘limda boshqariladi.
+          </p>
+
+          <button
+            class="primary-button"
+            type="button"
+          >
+            + O‘quvchi qo‘shish
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <!-- =================================================
+           TEACHERS
+      ================================================== -->
+
+      <div
+        class="page-view"
+        data-page-view="teachers"
+      >
+
+        <div class="empty-module">
+
+          <div class="module-icon">
+            ♜
+          </div>
+
+          <span class="section-overline">
+            TEACHER MANAGEMENT
+          </span>
+
+          <h2>
+            Ustozlar
+          </h2>
+
+          <p>
+            Ustozlar, ularning guruhlari,
+            dars jadvali va davomat faoliyati
+            shu bo‘lim orqali boshqariladi.
+          </p>
+
+          <button
+            class="primary-button"
+            type="button"
+          >
+            + Ustoz qo‘shish
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <!-- =================================================
+           GROUPS
+      ================================================== -->
+
+      <div
+        class="page-view"
+        data-page-view="groups"
+      >
+
+        <div class="empty-module">
+
+          <div class="module-icon">
+            👥
+          </div>
+
+          <span class="section-overline">
+            GROUP MANAGEMENT
+          </span>
+
+          <h2>
+            Guruhlar
+          </h2>
+
+          <p>
+            Guruh tarkibi, ustoz, jadval,
+            o‘quvchilar va guruh statistikasi
+            boshqariladi.
+          </p>
+
+          <button
+            class="primary-button"
+            type="button"
+          >
+            + Guruh yaratish
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <!-- =================================================
+           ATTENDANCE
+      ================================================== -->
+
+      <div
+        class="page-view"
+        data-page-view="attendance"
+      >
+
+        <div class="module-header">
+
+          <div>
+
+            <span class="section-overline">
+              ATTENDANCE INTELLIGENCE
+            </span>
+
+            <h2>
+              Davomat nazorati
+            </h2>
+
+            <p>
+              Dars boshlanganidan keyin davomat
+              avtomatik nazorat qilinadi.
+            </p>
+
+          </div>
+
+          <button
+            class="primary-button"
+            type="button"
+            data-attendance-action="today"
+          >
+            📅 Bugungi davomat
+          </button>
+
+        </div>
+
+
+        <div class="alert-info">
+
+          <span>⏱</span>
+
+          <div>
+
+            <strong>
+              15 daqiqalik nazorat
+            </strong>
+
+            <p>
+              Dars boshlanganidan 15 daqiqa
+              ichida ustoz davomat qilmasa,
+              tizim direktor yoki Super Admin'ga
+              avtomatik ogohlantirish yuboradi.
+            </p>
 
           </div>
 
         </div>
 
       </div>
+
+
+      <!-- =================================================
+           LESSONS
+      ================================================== -->
+
+      <div
+        class="page-view"
+        data-page-view="lessons"
+      >
+
+        <div class="empty-module">
+
+          <div class="module-icon">
+            📚
+          </div>
+
+          <span class="section-overline">
+            LESSON MANAGEMENT
+          </span>
+
+          <h2>
+            Darslar
+          </h2>
+
+          <p>
+            Dars jadvali, boshlanish va tugash
+            vaqti, ustoz hamda guruhlar
+            shu yerda boshqariladi.
+          </p>
+
+          <button
+            class="primary-button"
+            type="button"
+          >
+            + Dars yaratish
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <!-- =================================================
+           AI ANALYSIS
+      ================================================== -->
+
+      <div
+        class="page-view"
+        data-page-view="analysis"
+      >
+
+        <div class="module-header">
+
+          <div>
+
+            <span class="section-overline">
+              CHESARA CHESS INTELLIGENCE
+            </span>
+
+            <h2>
+              🧠 AI O‘yin tahlili
+            </h2>
+
+            <p>
+              O‘yinlarni import qiling va
+              CHESARA Intelligence orqali
+              o‘yin uslubingizni tahlil qiling.
+            </p>
+
+          </div>
+
+        </div>
+
+
+        <section class="panel analysis-panel">
+
+          <form
+            data-analysis-form
+            class="analysis-form"
+          >
+
+            <label>
+              Manba
+
+              <select name="source">
+
+                <option value="manual">
+                  PGN / Manual
+                </option>
+
+                <option value="lichess">
+                  Lichess
+                </option>
+
+                <option value="chesscom">
+                  Chess.com
+                </option>
+
+                <option value="telegram">
+                  Telegram
+                </option>
+
+              </select>
+
+            </label>
+
+
+            <label>
+              O‘yinchi
+
+              <input
+                type="text"
+                name="player"
+                placeholder="O‘yinchi nomi"
+              >
+
+            </label>
+
+
+            <label class="full-width">
+
+              PGN yoki o‘yin ma’lumotlari
+
+              <textarea
+                name="game"
+                rows="10"
+                placeholder="PGN ma'lumotlarini shu yerga joylang..."
+              ></textarea>
+
+            </label>
+
+
+            <button
+              type="submit"
+              class="primary-button full-width"
+            >
+              🧠 CHESARA AI orqali tahlil qilish
+            </button>
+
+          </form>
+
+
+          <div
+            data-analysis-result
+            class="analysis-result"
+          >
+
+            <div class="analysis-placeholder">
+
+              <span>
+                ♟
+              </span>
+
+              <strong>
+                Tahlil natijasi shu yerda ko‘rinadi
+              </strong>
+
+              <p>
+                O‘yinni yuboring.
+              </p>
+
+            </div>
+
+          </div>
+
+        </section>
+
+      </div>
+
+
+      <!-- =================================================
+           TOURNAMENTS
+      ================================================== -->
+
+      <div
+        class="page-view"
+        data-page-view="tournaments"
+      >
+
+        <div class="empty-module">
+
+          <div class="module-icon">
+            🏆
+          </div>
+
+          <span class="section-overline">
+            TOURNAMENT INTELLIGENCE
+          </span>
+
+          <h2>
+            Turnirlar
+          </h2>
+
+          <p>
+            Turnirlar, ishtirokchilar,
+            natijalar va reytinglar
+            boshqariladi.
+          </p>
+
+        </div>
+
+      </div>
+
+
+      <!-- =================================================
+           NEWS
+      ================================================== -->
+
+      <div
+        class="page-view"
+        data-page-view="news"
+      >
+
+        <div class="empty-module">
+
+          <div class="module-icon">
+            📰
+          </div>
+
+          <span class="section-overline">
+            CHESS NEWS
+          </span>
+
+          <h2>
+            Shaxmat yangiliklari
+          </h2>
+
+          <p>
+            Turnirlar, muhim natijalar,
+            shaxmat olamidagi yangiliklar
+            va e'lonlar.
+          </p>
+
+        </div>
+
+      </div>
+
+
+      <!-- =================================================
+           REPORTS
+      ================================================== -->
+
+      <div
+        class="page-view"
+        data-page-view="reports"
+      >
+
+        <div class="module-header">
+
+          <div>
+
+            <span class="section-overline">
+              ANALYTICS
+            </span>
+
+            <h2>
+              📊 Hisobotlar
+            </h2>
+
+            <p>
+              O‘quvchi, guruh, ustoz va markaz
+              faoliyati bo‘yicha hisobotlar.
+            </p>
+
+          </div>
+
+          <button
+            class="primary-button"
+            type="button"
+            data-generate-report
+          >
+            📊 Hisobot yaratish
+          </button>
+
+        </div>
+
+
+        <section class="panel">
+
+          <h3>
+            Oylik hisobot
+          </h3>
+
+          <p>
+            Masalan, 1-sentabrdan 30-sentabrgacha
+            bo‘lgan davr tanlanib, o‘quvchining
+            davomat, dars va shaxmat faoliyati
+            yagona hisobotga birlashtiriladi.
+          </p>
+
+        </section>
+
+      </div>
+
+
+      <!-- =================================================
+           ALERTS
+      ================================================== -->
+
+      <div
+        class="page-view"
+        data-page-view="alerts"
+      >
+
+        <div class="module-header">
+
+          <div>
+
+            <span class="section-overline">
+              INTELLIGENT MONITORING
+            </span>
+
+            <h2>
+              🔔 Ogohlantirishlar
+            </h2>
+
+            <p>
+              Muhim hodisalar avtomatik nazorat qilinadi.
+            </p>
+
+          </div>
+
+        </div>
+
+
+        <section class="panel">
+
+          <div
+            class="alert-empty"
+            data-alert
+          >
+
+            <span>
+              ✓
+            </span>
+
+            <strong>
+              Hozircha yangi ogohlantirish yo‘q
+            </strong>
+
+            <p>
+              CHESARA muhim holatlarni avtomatik
+              kuzatib boradi.
+            </p>
+
+          </div>
+
+        </section>
+
+      </div>
+
+
+      <!-- =================================================
+           SETTINGS
+      ================================================== -->
+
+      <div
+        class="page-view"
+        data-page-view="settings"
+      >
+
+        <div class="empty-module">
+
+          <div class="module-icon">
+            ⚙
+          </div>
+
+          <span class="section-overline">
+            SYSTEM SETTINGS
+          </span>
+
+          <h2>
+            Sozlamalar
+          </h2>
+
+          <p>
+            CHESARA tizimi, bildirishnomalar,
+            foydalanuvchi rollari va platforma
+            sozlamalari shu bo‘limda boshqariladi.
+          </p>
+
+        </div>
+
+      </div>
+
 
     </section>
 
+
+    <!-- ===================================================
+         FOOTER
+    ==================================================== -->
+
+    <footer class="footer">
+
+      <span>
+        © 2026 CHESARA
+      </span>
+
+      <span>
+        AI Chess Intelligence Platform
+      </span>
+
+    </footer>
+
   </main>
 
-</div>
+
+  <!-- =====================================================
+       TOAST
+  ====================================================== -->
+
+  <div class="chesara-toast-container"></div>
 
 
-<script>
+  <!-- =====================================================
+       APP
+  ====================================================== -->
 
-  const panelNames = {
-    dashboard: ["Boshqaruv paneli", "CHESARA markazining umumiy holati"],
-    students: ["O‘quvchilar", "O‘quvchilar boshqaruvi"],
-    teachers: ["Ustozlar", "Ustozlar boshqaruvi"],
-    groups: ["Guruhlar", "O‘quvchilar guruhlari"],
-    attendance: ["Davomat", "Davomat va avtomatik nazorat"],
-    lessons: ["Darslar", "Dars jadvali va jonli darslar"],
-    analysis: ["O‘yin tahlili", "AI Chess Intelligence"],
-    tournaments: ["Turnirlar", "Turnirlar va natijalar"],
-    news: ["Yangiliklar", "Shaxmat yangiliklari va strimlar"],
-    reports: ["Hisobotlar", "Oylik va o‘quvchi hisobotlari"],
-    alerts: ["Ogohlantirishlar", "Avtomatik xabarlar"],
-    settings: ["Sozlamalar", "CHESARA tizim sozlamalari"]
-  };
-
-
-  function showPanel(id, button) {
-
-    document.querySelectorAll(".panel").forEach(panel => {
-      panel.classList.remove("active");
-    });
-
-    const target = document.getElementById(id);
-
-    if (target) {
-      target.classList.add("active");
-    }
-
-    document.querySelectorAll(".menu button").forEach(btn => {
-      btn.classList.remove("active");
-    });
-
-    if (button) {
-      button.classList.add("active");
-    }
-
-    const info = panelNames[id];
-
-    if (info) {
-      document.getElementById("pageTitle").textContent = info[0];
-      document.getElementById("pageSubtitle").textContent = info[1];
-    }
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-  }
-
-
-  async function checkServer() {
-
-    const status = document.getElementById("serverStatus");
-    const text = document.getElementById("serverText");
-
-    status.textContent = "Tekshirilmoqda...";
-    text.textContent = "Server bilan aloqa qilinmoqda...";
-
-    try {
-
-      const response = await fetch("/api/health");
-
-      const data = await response.json();
-
-      if (data.success) {
-
-        status.textContent = "Online";
-        status.style.color = "#16a34a";
-
-        text.textContent = "CHESARA server faol ishlayapti.";
-
-      } else {
-
-        status.textContent = "Xatolik";
-        status.style.color = "#dc2626";
-
-      }
-
-    } catch (error) {
-
-      status.textContent = "Offline";
-      status.style.color = "#dc2626";
-
-      text.textContent = "Server bilan aloqa yo‘q.";
-
-    }
-  }
-
-
-  document.addEventListener("DOMContentLoaded", () => {
-
-    checkServer();
-
-  });
-
-</script>
+  <script src="/app.js"></script>
 
 </body>
 </html>
