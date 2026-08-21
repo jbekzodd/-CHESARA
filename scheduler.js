@@ -1,22 +1,22 @@
-```js
-const cron = require("node-cron");
+const axios = require("axios");
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-const lessons = new Map();
+if (!TELEGRAM_BOT_TOKEN) {
+  console.warn("TELEGRAM_BOT_TOKEN topilmadi. Scheduler Telegram xabar yubora olmaydi.");
+}
 
-// ========================================
-// TELEGRAM XABAR YUBORISH
-// ========================================
-
+/**
+ * Telegram orqali xabar yuborish
+ */
 async function sendTelegramMessage(chatId, text) {
   if (!TELEGRAM_BOT_TOKEN) {
-    console.log("⚠️ TELEGRAM_BOT_TOKEN topilmadi.");
+    console.error("TELEGRAM_BOT_TOKEN mavjud emas.");
     return false;
   }
 
   if (!chatId) {
-    console.log("⚠️ Telegram chat ID topilmadi.");
+    console.error("chatId mavjud emas.");
     return false;
   }
 
@@ -24,248 +24,39 @@ async function sendTelegramMessage(chatId, text) {
     const url =
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: text,
-        parse_mode: "HTML"
-      })
+    const response = await axios.post(url, {
+      chat_id: chatId,
+      text: text,
+      parse_mode: "HTML"
     });
 
-    const result = await response.json();
-
-    if (!result.ok) {
-      console.error("❌ Telegram API xatosi:", result);
-      return false;
-    }
-
-    console.log("✅ Telegram xabar yuborildi.");
-
-    return true;
-
+    return response.data.ok;
   } catch (error) {
     console.error(
-      "❌ Telegram xabar xatosi:",
-      error.message
+      "Telegram xabar yuborishda xatolik:",
+      error.response?.data || error.message
     );
 
     return false;
   }
 }
 
-// ========================================
-// DARS QO‘SHISH
-// ========================================
-
-function addLesson(data = {}) {
-  const id =
-    data.id ||
-    `lesson_${Date.now()}_${Math.random()
-      .toString(36)
-      .substring(2, 8)}`;
-
-  const lesson = {
-    id,
-
-    groupId: data.groupId || null,
-    groupName: data.groupName || "Noma'lum guruh",
-
-    coachId: data.coachId || null,
-    coachName: data.coachName || "Noma'lum ustoz",
-
-    directorTelegramId:
-      data.directorTelegramId || null,
-
-    startTime:
-      data.startTime || new Date().toISOString(),
-
-    durationMinutes:
-      Number(data.durationMinutes) || 60,
-
-    attendanceDone: false,
-    warningSent: false,
-    finished: false,
-
-    createdAt: Date.now()
-  };
-
-  lessons.set(id, lesson);
-
-  console.log(`📚 Yangi dars yaratildi: ${id}`);
-
-  return lesson;
-}
-
-// ========================================
-// ESKI CREATE LESSON FUNKSIYASI
-// ========================================
-
-function createLesson(lessonId, data = {}) {
-  return addLesson({
-    ...data,
-    id: lessonId
-  });
-}
-
-// ========================================
-// BARCHA DARSLARNI OLISH
-// ========================================
-
-function getLessons() {
-  return Array.from(lessons.values());
-}
-
-// ========================================
-// BITTA DARSNI OLISH
-// ========================================
-
-function getLesson(id) {
-  return lessons.get(id) || null;
-}
-
-// ========================================
-// DAVOMATNI BELGILASH
-// ========================================
-
-function markAttendance(lessonId) {
-  const lesson = lessons.get(lessonId);
-
-  if (!lesson) {
-    console.log(`⚠️ Dars topilmadi: ${lessonId}`);
-    return false;
-  }
-
-  if (lesson.finished) {
-    console.log(
-      `⚠️ Dars allaqachon yakunlangan: ${lessonId}`
-    );
-
-    return false;
-  }
-
-  lesson.attendanceDone = true;
-
-  console.log(
-    `✅ Davomat belgilandi: ${lessonId}`
-  );
-
-  return true;
-}
-
-// ========================================
-// DARSNI YAKUNLASH
-// ========================================
-
-function finishLesson(lessonId) {
-  const lesson = lessons.get(lessonId);
-
-  if (!lesson) {
-    console.log(`⚠️ Dars topilmadi: ${lessonId}`);
-    return false;
-  }
-
-  lesson.finished = true;
-
-  console.log(
-    `🏁 Dars yakunlandi: ${lessonId}`
-  );
-
-  return true;
-}
-
-// ========================================
-// SCHEDULER
-// ========================================
-
-let schedulerStarted = false;
-
+/**
+ * Scheduler ishga tushiriladi
+ */
 function startScheduler() {
-  if (schedulerStarted) {
+  console.log("Scheduler ishga tushdi.");
+
+  // Har 1 soatda tekshiradi.
+  setInterval(() => {
     console.log(
-      "⏰ Scheduler allaqachon ishga tushgan."
+      "Scheduler tekshiruvi:",
+      new Date().toISOString()
     );
-
-    return;
-  }
-
-  schedulerStarted = true;
-
-  cron.schedule("* * * * *", async () => {
-    const now = Date.now();
-
-    for (const [lessonId, lesson] of lessons.entries()) {
-
-      if (lesson.finished) {
-        continue;
-      }
-
-      if (lesson.attendanceDone) {
-        continue;
-      }
-
-      if (lesson.warningSent) {
-        continue;
-      }
-
-      const startTime =
-        new Date(lesson.startTime).getTime();
-
-      if (Number.isNaN(startTime)) {
-        continue;
-      }
-
-      const elapsedMinutes =
-        (now - startTime) / 1000 / 60;
-
-      if (elapsedMinutes < 15) {
-        continue;
-      }
-
-      lesson.warningSent = true;
-
-      const message =
-        `🚨 <b>CHESARA — Davomat ogohlantirishi</b>\n\n` +
-        `📚 Guruh: <b>${lesson.groupName}</b>\n` +
-        `👨‍🏫 Ustoz: <b>${lesson.coachName}</b>\n\n` +
-        `⏰ Dars boshlanganiga 15 daqiqa bo‘ldi.\n` +
-        `❌ Davomat hali belgilanmagan.\n\n` +
-        `Iltimos, CHESARA tizimini tekshiring.`;
-
-      const chatId =
-        lesson.directorTelegramId ||
-        process.env.DIRECTOR_CHAT_ID;
-
-      if (chatId) {
-        await sendTelegramMessage(
-          chatId,
-          message
-        );
-      }
-    }
-  });
-
-  console.log(
-    "⏰ CHESARA Scheduler ishga tushdi."
-  );
+  }, 60 * 60 * 1000);
 }
-
-// ========================================
-// EXPORT
-// ========================================
 
 module.exports = {
   startScheduler,
-  getLessons,
-  getLesson,
-  addLesson,
-  createLesson,
-  markAttendance,
-  finishLesson,
-  sendTelegramMessage,
-  lessons
+  sendTelegramMessage
 };
-```
