@@ -1,262 +1,560 @@
+```js
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+const DATA_DIR = path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'lessons.json');
+
+let lessons = [];
+let schedulerInterval = null;
+let warningCallback = null;
+
 // ============================================================
-// CHESARA — Lesson & Attendance Scheduler
+// FILESYSTEM
 // ============================================================
 
-const fs = require("fs");
-const path = require("path");
+function ensureDataFile() {
+    if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
 
-// ------------------------------------------------------------
-// DATA FILE
-// ------------------------------------------------------------
-
-const DATA_DIR = path.join(__dirname, "data");
-const DATA_FILE = path.join(DATA_DIR, "lessons.json");
-
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(DATA_FILE)) {
+        fs.writeFileSync(DATA_FILE, '[]', 'utf8');
+    }
 }
 
-if (!fs.existsSync(DATA_FILE)) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify([], null, 2), "utf8");
+function loadLessons() {
+    ensureDataFile();
+
+    try {
+        const data = fs.readFileSync(DATA_FILE, 'utf8');
+
+        if (!data.trim()) {
+            lessons = [];
+            return;
+        }
+
+        const parsed = JSON.parse(data);
+
+        lessons = Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+        console.error('❌ lessons.json o‘qishda xato:', error.message);
+        lessons = [];
+    }
 }
 
-// ------------------------------------------------------------
-// HELPERS
-// ------------------------------------------------------------
+function saveLessons() {
+    ensureDataFile();
 
-function readLessons() {
-  try {
-    const data = fs.readFileSync(DATA_FILE, "utf8");
-    if (!data.trim()) return [];
-    const lessons = JSON.parse(data);
-    return Array.isArray(lessons) ? lessons : [];
-  } catch (error) {
-    console.error("❌ lessons.json o'qishda xatolik:", error.message);
-    return [];
-  }
+    try {
+        fs.writeFileSync(
+            DATA_FILE,
+            JSON.stringify(lessons, null, 2),
+            'utf8'
+        );
+
+        return true;
+    } catch (error) {
+        console.error('❌ lessons.json saqlashda xato:', error.message);
+        return false;
+    }
 }
 
-function saveLessons(lessons) {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(lessons, null, 2), "utf8");
-    return true;
-  } catch (error) {
-    console.error("❌ lessons.json saqlashda xatolik:", error.message);
-    return false;
-  }
+// ============================================================
+// ID
+// ============================================================
+
+function generateLessonId() {
+    if (lessons.length === 0) {
+        return 1;
+    }
+
+    const ids = lessons
+        .map(lesson => Number(lesson.id))
+        .filter(id => Number.isFinite(id));
+
+    return ids.length > 0 ? Math.max(...ids) + 1 : 1;
 }
 
-// Vaqtni to'g'ri millisekundga o'tkazuvchi yordamchi funksiya
-function parseLessonTime(timeStr) {
-  if (!timeStr) return null;
+// ============================================================
+// DATE / TIME
+// ============================================================
 
-  // Agar to'liq ISO/Sana formati bo'lsa (masalan: 2026-08-21T14:30:00)
-  let timestamp = new Date(timeStr).getTime();
-  if (!Number.isNaN(timestamp)) {
-    return timestamp;
-  }
+function parseLessonTime(lesson) {
+    if (!lesson) {
+        return null;
+    }
 
-  // Agar faqat soat va daqiqa bo'lsa (masalan: "14:30" yoki "14:30:00")
-  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-  if (match) {
-    const now = new Date();
-    const hours = parseInt(match[1], 10);
-    const minutes = parseInt(match[2], 10);
-    const seconds = match[3] ? parseInt(match[3], 10) : 0;
+    const value =
+        lesson.startTime ||
+        lesson.datetime ||
+        lesson.dateTime ||
+        lesson.start ||
+        lesson.date;
 
-    const lessonDate = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      hours,
-      minutes,
-      seconds
-    );
-    return lessonDate.getTime();
-  }
+    if (!value) {
+        return null;
+    }
 
-  return null;
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    return date;
 }
 
-// ------------------------------------------------------------
-// GET ALL LESSONS
-// ------------------------------------------------------------
+// ============================================================
+// GET LESSONS
+// ============================================================
 
-function getLessons() {
-  return readLessons();
+function getLessons(filters = {}) {
+    loadLessons();
+
+    let result = [...lessons];
+
+    if (filters.teacherId !== undefined) {
+        result = result.filter(
+            lesson => String(lesson.teacherId) === String(filters.teacherId)
+        );
+    }
+
+    if (filters.studentId !== undefined) {
+        result = result.filter(
+            lesson =>
+                String(lesson.studentId) === String(filters.studentId)
+        );
+    }
+
+    if (filters.status !== undefined) {
+        result = result.filter(
+            lesson => lesson.status === filters.status
+        );
+    }
+
+    if (filters.date !== undefined) {
+        result = result.filter(lesson => {
+            const date = parseLessonTime(lesson);
+
+            if (!date) {
+                return false;
+            }
+
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+
+            return `${year}-${month}-${day}` === filters.date;
+        });
+    }
+
+    result.sort((a, b) => {
+        const dateA = parseLessonTime(a);
+        const dateB = parseLessonTime(b);
+
+        if (!dateA && !dateB) return 0;
+        if (!dateA) return 1;
+        if (!dateB) return -1;
+
+        return dateA.getTime() - dateB.getTime();
+    });
+
+    return result;
 }
 
-// ------------------------------------------------------------
+// ============================================================
 // GET ONE LESSON
-// ------------------------------------------------------------
+// ============================================================
 
 function getLesson(id) {
-  const lessons = readLessons();
-  return lessons.find(lesson => String(lesson.id) === String(id)) || null;
+    loadLessons();
+
+    return (
+        lessons.find(
+            lesson => String(lesson.id) === String(id)
+        ) || null
+    );
 }
 
-// ------------------------------------------------------------
+// ============================================================
 // ADD LESSON
-// ------------------------------------------------------------
+// ============================================================
 
-function addLesson(data) {
-  const lessons = readLessons();
+function addLesson(data = {}) {
+    loadLessons();
 
-  const lesson = {
-    id: data.id || "lesson_" + Date.now(),
-    groupId: data.groupId || null,
-    groupName: data.groupName || "",
-    coachId: data.coachId || null,
-    coachName: data.coachName || "",
-    coachTelegramId: data.coachTelegramId || null,
-    directorTelegramId: data.directorTelegramId || null,
-    startTime: data.startTime || "",
-    durationMinutes: Number(data.durationMinutes) || 90,
-    attendanceTaken: false,
-    attendanceAt: null,
-    warningSent: false,
-    finished: false,
-    createdAt: new Date().toISOString()
-  };
+    if (!data || typeof data !== 'object') {
+        throw new Error('Dars ma’lumotlari noto‘g‘ri.');
+    }
 
-  lessons.push(lesson);
-  saveLessons(lessons);
+    const lesson = {
+        id: generateLessonId(),
 
-  return lesson;
+        studentId:
+            data.studentId !== undefined
+                ? data.studentId
+                : null,
+
+        studentName:
+            data.studentName !== undefined
+                ? data.studentName
+                : '',
+
+        teacherId:
+            data.teacherId !== undefined
+                ? data.teacherId
+                : null,
+
+        teacherName:
+            data.teacherName !== undefined
+                ? data.teacherName
+                : '',
+
+        courseId:
+            data.courseId !== undefined
+                ? data.courseId
+                : null,
+
+        courseName:
+            data.courseName !== undefined
+                ? data.courseName
+                : '',
+
+        title:
+            data.title !== undefined
+                ? data.title
+                : 'Shaxmat darsi',
+
+        description:
+            data.description !== undefined
+                ? data.description
+                : '',
+
+        date:
+            data.date !== undefined
+                ? data.date
+                : null,
+
+        startTime:
+            data.startTime !== undefined
+                ? data.startTime
+                : data.datetime || null,
+
+        endTime:
+            data.endTime !== undefined
+                ? data.endTime
+                : null,
+
+        duration:
+            data.duration !== undefined
+                ? data.duration
+                : 60,
+
+        status:
+            data.status !== undefined
+                ? data.status
+                : 'scheduled',
+
+        attendance: {
+            status: 'not_marked',
+            markedAt: null,
+            note: ''
+        },
+
+        finishedAt: null,
+
+        createdAt: new Date().toISOString(),
+
+        updatedAt: new Date().toISOString()
+    };
+
+    lessons.push(lesson);
+
+    if (!saveLessons()) {
+        throw new Error('Darsni saqlab bo‘lmadi.');
+    }
+
+    return lesson;
 }
 
-// ------------------------------------------------------------
+// ============================================================
 // MARK ATTENDANCE
-// ------------------------------------------------------------
+// ============================================================
 
-function markAttendance(id) {
-  const lessons = readLessons();
-  const index = lessons.findIndex(lesson => String(lesson.id) === String(id));
+function markAttendance(id, attendanceData = {}) {
+    loadLessons();
 
-  if (index === -1) {
-    return { success: false, message: "Dars topilmadi." };
-  }
+    const lesson = lessons.find(
+        item => String(item.id) === String(id)
+    );
 
-  lessons[index].attendanceTaken = true;
-  lessons[index].attendanceAt = new Date().toISOString();
+    if (!lesson) {
+        return null;
+    }
 
-  saveLessons(lessons);
+    let status = attendanceData;
 
-  return { success: true, lesson: lessons[index] };
+    if (
+        attendanceData &&
+        typeof attendanceData === 'object'
+    ) {
+        status =
+            attendanceData.status ||
+            attendanceData.attendance ||
+            attendanceData.value ||
+            'present';
+    }
+
+    if (typeof status !== 'string') {
+        status = 'present';
+    }
+
+    status = status.toLowerCase();
+
+    const allowedStatuses = [
+        'present',
+        'absent',
+        'late',
+        'excused',
+        'not_marked'
+    ];
+
+    if (!allowedStatuses.includes(status)) {
+        status = 'present';
+    }
+
+    let note = '';
+
+    if (
+        attendanceData &&
+        typeof attendanceData === 'object' &&
+        attendanceData.note !== undefined
+    ) {
+        note = String(attendanceData.note);
+    }
+
+    lesson.attendance = {
+        status,
+        markedAt: new Date().toISOString(),
+        note
+    };
+
+    lesson.updatedAt = new Date().toISOString();
+
+    if (status === 'present' || status === 'late') {
+        lesson.attendanceStatus = status;
+    } else {
+        lesson.attendanceStatus = status;
+    }
+
+    saveLessons();
+
+    return lesson;
 }
 
-// ------------------------------------------------------------
+// ============================================================
 // FINISH LESSON
-// ------------------------------------------------------------
+// ============================================================
 
-function finishLesson(id) {
-  const lessons = readLessons();
-  const index = lessons.findIndex(lesson => String(lesson.id) === String(id));
+function finishLesson(id, data = {}) {
+    loadLessons();
 
-  if (index === -1) return null;
+    const lesson = lessons.find(
+        item => String(item.id) === String(id)
+    );
 
-  lessons[index].finished = true;
-  lessons[index].finishedAt = new Date().toISOString();
-
-  saveLessons(lessons);
-
-  return lessons[index];
-}
-
-// ------------------------------------------------------------
-// SCHEDULER
-// ------------------------------------------------------------
-
-let schedulerStarted = false;
-
-function startScheduler(sendWarning) {
-  if (schedulerStarted) {
-    console.log("ℹ️ Scheduler allaqachon ishlayapti.");
-    return;
-  }
-
-  schedulerStarted = true;
-  console.log("⏰ CHESARA Attendance Scheduler ishga tushdi.");
-
-  // Har 1 daqiqada tekshiradi
-  setInterval(() => {
-    try {
-      checkAttendance(sendWarning);
-    } catch (error) {
-      console.error("❌ Scheduler xatosi:", error.message);
-    }
-  }, 60 * 1000);
-
-  // Server ishga tushganda darhol bir marta tekshiradi
-  try {
-    checkAttendance(sendWarning);
-  } catch (error) {
-    console.error("❌ Scheduler boshlang'ich tekshiruv xatosi:", error.message);
-  }
-}
-
-// ------------------------------------------------------------
-// CHECK ATTENDANCE
-// ------------------------------------------------------------
-
-function checkAttendance(sendWarning) {
-  const lessons = readLessons();
-  const now = Date.now();
-  let updated = false;
-
-  lessons.forEach(lesson => {
-    if (!lesson.startTime || lesson.attendanceTaken || lesson.finished || lesson.warningSent) {
-      return;
+    if (!lesson) {
+        return null;
     }
 
-    const start = parseLessonTime(lesson.startTime);
-    if (!start) return;
+    lesson.status = 'finished';
 
-    const elapsedMinutes = (now - start) / 60000;
-    const duration = lesson.durationMinutes || 90;
+    lesson.finishedAt = new Date().toISOString();
 
-    // Dars boshlanganidan 15 daqiqa o'tgan va dars davomiyligi tugamagan bo'lsa
-    if (elapsedMinutes >= 15 && elapsedMinutes <= duration) {
-      lesson.warningSent = true;
-      updated = true;
+    lesson.updatedAt = new Date().toISOString();
 
-      const warning = {
-        lessonId: lesson.id,
-        groupName: lesson.groupName,
-        coachName: lesson.coachName,
-        directorTelegramId: lesson.directorTelegramId,
-        message:
-          `⚠️ CHESARA DAVOMAT OGOHLANTIRISH\n\n` +
-          `📚 Guruh: ${lesson.groupName || "Noma'lum"}\n` +
-          `👨‍🏫 Ustoz: ${lesson.coachName || "Noma'lum"}\n` +
-          `⏰ Dars: ${lesson.startTime}\n\n` +
-          `Dars boshlanganiga 15 daqiqadan oshdi, ammo davomat hali qilinmagan.`
-      };
-
-      if (typeof sendWarning === "function") {
-        try {
-          sendWarning(warning);
-        } catch (error) {
-          console.error("❌ Ogohlantirish yuborishda xatolik:", error.message);
+    if (
+        data &&
+        typeof data === 'object'
+    ) {
+        if (data.note !== undefined) {
+            lesson.finishNote = String(data.note);
         }
-      }
-    }
-  });
 
-  if (updated) {
-    saveLessons(lessons);
-  }
+        if (data.homework !== undefined) {
+            lesson.homework = String(data.homework);
+        }
+
+        if (data.result !== undefined) {
+            lesson.result = data.result;
+        }
+
+        if (data.topic !== undefined) {
+            lesson.topic = String(data.topic);
+        }
+    }
+
+    saveLessons();
+
+    return lesson;
 }
 
-// ------------------------------------------------------------
+// ============================================================
+// ATTENDANCE CHECK
+// ============================================================
+
+function checkAttendance() {
+    loadLessons();
+
+    const now = new Date();
+
+    for (const lesson of lessons) {
+        if (
+            lesson.status === 'finished' ||
+            lesson.status === 'cancelled'
+        ) {
+            continue;
+        }
+
+        const lessonTime = parseLessonTime(lesson);
+
+        if (!lessonTime) {
+            continue;
+        }
+
+        const difference =
+            lessonTime.getTime() - now.getTime();
+
+        // Dars boshlanishidan 15 daqiqa oldin
+        const fifteenMinutes = 15 * 60 * 1000;
+
+        if (
+            difference <= fifteenMinutes &&
+            difference > 0 &&
+            lesson.warningSent !== true
+        ) {
+            lesson.warningSent = true;
+            lesson.warningSentAt = new Date().toISOString();
+            lesson.updatedAt = new Date().toISOString();
+
+            if (typeof warningCallback === 'function') {
+                try {
+                    warningCallback(lesson);
+                } catch (error) {
+                    console.error(
+                        '⚠️ warningCallback xatosi:',
+                        error.message
+                    );
+                }
+            }
+        }
+
+        // Dars vaqti o‘tib ketgan bo‘lsa
+        if (
+            difference <= 0 &&
+            lesson.status === 'scheduled'
+        ) {
+            const duration =
+                Number(lesson.duration) > 0
+                    ? Number(lesson.duration)
+                    : 60;
+
+            const endTime =
+                lessonTime.getTime() +
+                duration * 60 * 1000;
+
+            if (now.getTime() >= endTime) {
+                lesson.status = 'missed';
+
+                if (
+                    lesson.attendance &&
+                    lesson.attendance.status === 'not_marked'
+                ) {
+                    lesson.attendance.status = 'absent';
+                    lesson.attendance.markedAt =
+                        new Date().toISOString();
+                }
+
+                lesson.updatedAt =
+                    new Date().toISOString();
+            }
+        }
+    }
+
+    saveLessons();
+}
+
+// ============================================================
+// START SCHEDULER
+// ============================================================
+
+function startScheduler(callback) {
+    loadLessons();
+
+    if (typeof callback === 'function') {
+        warningCallback = callback;
+    }
+
+    if (schedulerInterval) {
+        clearInterval(schedulerInterval);
+        schedulerInterval = null;
+    }
+
+    // Birinchi tekshiruv
+    try {
+        checkAttendance();
+    } catch (error) {
+        console.error(
+            '❌ Scheduler tekshiruvida xato:',
+            error.message
+        );
+    }
+
+    // Har 1 daqiqada tekshiradi
+    schedulerInterval = setInterval(() => {
+        try {
+            checkAttendance();
+        } catch (error) {
+            console.error(
+                '❌ Scheduler xatosi:',
+                error.message
+            );
+        }
+    }, 60 * 1000);
+
+    console.log('✅ Lesson scheduler ishga tushdi.');
+
+    return true;
+}
+
+// ============================================================
+// STOP SCHEDULER
+// ============================================================
+
+function stopScheduler() {
+    if (schedulerInterval) {
+        clearInterval(schedulerInterval);
+        schedulerInterval = null;
+    }
+
+    console.log('🛑 Lesson scheduler to‘xtatildi.');
+
+    return true;
+}
+
+// ============================================================
 // EXPORTS
-// ------------------------------------------------------------
+// ============================================================
 
 module.exports = {
-  startScheduler,
-  getLessons,
-  getLesson,
-  addLesson,
-  markAttendance,
-  finishLesson
+    startScheduler,
+    getLessons,
+    getLesson,
+    addLesson,
+    markAttendance,
+    finishLesson
 };
+```
