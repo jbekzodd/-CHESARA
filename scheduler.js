@@ -1,366 +1,484 @@
-'use strict';
-
-const fs = require('fs');
-const path = require('path');
-
-const DATA_DIR = path.join(__dirname, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'lessons.json');
-
-let lessons = [];
-let schedulerInterval = null;
-let warningCallback = null;
-
 // ============================================================
-// FILESYSTEM
+// CHESARA — Attendance Scheduler
+// Toza va xavfsiz versiya
 // ============================================================
+
+const fs = require("fs");
+const path = require("path");
+
+// ------------------------------------------------------------
+// DATA
+// ------------------------------------------------------------
+
+const DATA_DIR = path.join(__dirname, "data");
+const DATA_FILE = path.join(DATA_DIR, "lessons.json");
 
 function ensureDataFile() {
+  try {
     if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.mkdirSync(DATA_DIR, { recursive: true });
     }
 
     if (!fs.existsSync(DATA_FILE)) {
-        fs.writeFileSync(DATA_FILE, '[]', 'utf8');
+      fs.writeFileSync(DATA_FILE, "[]", "utf8");
     }
+  } catch (error) {
+    console.error(
+      "❌ Scheduler data faylini yaratishda xatolik:",
+      error.message
+    );
+  }
 }
 
-function loadLessons() {
-    ensureDataFile();
+ensureDataFile();
 
-    try {
-        const data = fs.readFileSync(DATA_FILE, 'utf8');
+// ------------------------------------------------------------
+// READ
+// ------------------------------------------------------------
 
-        if (!data.trim()) {
-            lessons = [];
-            return;
-        }
+function readLessons() {
+  ensureDataFile();
 
-        const parsed = JSON.parse(data);
-        lessons = Array.isArray(parsed) ? parsed : [];
-    } catch (error) {
-        console.error('lessons.json oqishda xato:', error.message);
-        lessons = [];
+  try {
+    const raw = fs.readFileSync(DATA_FILE, "utf8");
+
+    if (!raw || !raw.trim()) {
+      return [];
     }
+
+    const data = JSON.parse(raw);
+
+    if (!Array.isArray(data)) {
+      console.error("❌ lessons.json array emas.");
+      return [];
+    }
+
+    return data;
+  } catch (error) {
+    console.error(
+      "❌ lessons.json o'qishda xatolik:",
+      error.message
+    );
+
+    return [];
+  }
 }
 
-function saveLessons() {
-    ensureDataFile();
+// ------------------------------------------------------------
+// SAVE
+// ------------------------------------------------------------
 
-    try {
-        fs.writeFileSync(DATA_FILE, JSON.stringify(lessons, null, 2), 'utf8');
-        return true;
-    } catch (error) {
-        console.error('lessons.json saqlashda xato:', error.message);
-        return false;
-    }
+function saveLessons(lessons) {
+  ensureDataFile();
+
+  try {
+    fs.writeFileSync(
+      DATA_FILE,
+      JSON.stringify(lessons, null, 2),
+      "utf8"
+    );
+
+    return true;
+  } catch (error) {
+    console.error(
+      "❌ lessons.json saqlashda xatolik:",
+      error.message
+    );
+
+    return false;
+  }
 }
 
-// ============================================================
-// ID
-// ============================================================
+// ------------------------------------------------------------
+// TIME
+// ------------------------------------------------------------
 
-function generateLessonId() {
-    if (lessons.length === 0) {
-        return 1;
-    }
+function parseLessonTime(value) {
+  if (!value) {
+    return null;
+  }
 
-    const ids = lessons
-        .map(lesson => Number(lesson.id))
-        .filter(id => Number.isFinite(id));
+  // Date / ISO format
+  const dateValue = new Date(value);
 
-    return ids.length > 0 ? Math.max(...ids) + 1 : 1;
+  if (!Number.isNaN(dateValue.getTime())) {
+    return dateValue.getTime();
+  }
+
+  // HH:mm yoki HH:mm:ss
+  const match = String(value)
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3] || 0);
+
+  if (
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59 ||
+    seconds < 0 ||
+    seconds > 59
+  ) {
+    return null;
+  }
+
+  const now = new Date();
+
+  const lessonDate = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    hours,
+    minutes,
+    seconds,
+    0
+  );
+
+  return lessonDate.getTime();
 }
 
-// ============================================================
-// DATE / TIME
-// ============================================================
+// ------------------------------------------------------------
+// GET ALL
+// ------------------------------------------------------------
 
-function parseLessonTime(lesson) {
-    if (!lesson) {
-        return null;
-    }
-
-    const value = lesson.startTime || lesson.datetime || lesson.dateTime || lesson.start || lesson.date;
-
-    if (!value) {
-        return null;
-    }
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-        return null;
-    }
-
-    return date;
+function getLessons() {
+  return readLessons();
 }
 
-// ============================================================
-// GET LESSONS
-// ============================================================
-
-function getLessons(filters = {}) {
-    loadLessons();
-
-    let result = [...lessons];
-
-    if (filters.teacherId !== undefined) {
-        result = result.filter(lesson => String(lesson.teacherId) === String(filters.teacherId));
-    }
-
-    if (filters.studentId !== undefined) {
-        result = result.filter(lesson => String(lesson.studentId) === String(filters.studentId));
-    }
-
-    if (filters.status !== undefined) {
-        result = result.filter(lesson => lesson.status === filters.status);
-    }
-
-    if (filters.date !== undefined) {
-        result = result.filter(lesson => {
-            const date = parseLessonTime(lesson);
-            if (!date) return false;
-
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-
-            const formattedDate = year + '-' + month + '-' + day;
-            return formattedDate === filters.date;
-        });
-    }
-
-    result.sort((a, b) => {
-        const dateA = parseLessonTime(a);
-        const dateB = parseLessonTime(b);
-
-        if (!dateA && !dateB) return 0;
-        if (!dateA) return 1;
-        if (!dateB) return -1;
-
-        return dateA.getTime() - dateB.getTime();
-    });
-
-    return result;
-}
-
-// ============================================================
-// GET ONE LESSON
-// ============================================================
+// ------------------------------------------------------------
+// GET ONE
+// ------------------------------------------------------------
 
 function getLesson(id) {
-    loadLessons();
-    return lessons.find(lesson => String(lesson.id) === String(id)) || null;
+  const lessons = readLessons();
+
+  return (
+    lessons.find(
+      lesson => String(lesson.id) === String(id)
+    ) || null
+  );
 }
 
-// ============================================================
-// ADD LESSON
-// ============================================================
+// ------------------------------------------------------------
+// ADD
+// ------------------------------------------------------------
 
 function addLesson(data = {}) {
-    loadLessons();
+  const lessons = readLessons();
 
-    if (!data || typeof data !== 'object') {
-        throw new Error('Dars ma’lumotlari noto‘g‘ri.');
-    }
+  const lesson = {
+    id:
+      data.id ||
+      `lesson_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
 
-    const lesson = {
-        id: generateLessonId(),
-        studentId: data.studentId !== undefined ? data.studentId : null,
-        studentName: data.studentName !== undefined ? data.studentName : '',
-        teacherId: data.teacherId !== undefined ? data.teacherId : null,
-        teacherName: data.teacherName !== undefined ? data.teacherName : '',
-        courseId: data.courseId !== undefined ? data.courseId : null,
-        courseName: data.courseName !== undefined ? data.courseName : '',
-        title: data.title !== undefined ? data.title : 'Shaxmat darsi',
-        description: data.description !== undefined ? data.description : '',
-        date: data.date !== undefined ? data.date : null,
-        startTime: data.startTime !== undefined ? data.startTime : data.datetime || null,
-        endTime: data.endTime !== undefined ? data.endTime : null,
-        duration: data.duration !== undefined ? data.duration : 60,
-        status: data.status !== undefined ? data.status : 'scheduled',
-        attendance: {
-            status: 'not_marked',
-            markedAt: null,
-            note: ''
-        },
-        finishedAt: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-    };
+    groupId: data.groupId || null,
 
-    lessons.push(lesson);
+    groupName: data.groupName || "",
 
-    if (!saveLessons()) {
-        throw new Error('Darsni saqlab bo‘lmadi.');
-    }
+    coachId: data.coachId || null,
 
-    return lesson;
+    coachName: data.coachName || "",
+
+    coachTelegramId:
+      data.coachTelegramId || null,
+
+    directorTelegramId:
+      data.directorTelegramId || null,
+
+    startTime: data.startTime || "",
+
+    durationMinutes:
+      Number(data.durationMinutes) > 0
+        ? Number(data.durationMinutes)
+        : 90,
+
+    attendanceTaken: false,
+
+    attendanceAt: null,
+
+    warningSent: false,
+
+    finished: false,
+
+    finishedAt: null,
+
+    createdAt: new Date().toISOString()
+  };
+
+  lessons.push(lesson);
+
+  saveLessons(lessons);
+
+  return lesson;
 }
 
-// ============================================================
+// ------------------------------------------------------------
 // MARK ATTENDANCE
-// ============================================================
+// ------------------------------------------------------------
 
-function markAttendance(id, attendanceData = {}) {
-    loadLessons();
+function markAttendance(id) {
+  const lessons = readLessons();
 
-    const lesson = lessons.find(item => String(item.id) === String(id));
-    if (!lesson) return null;
+  const index = lessons.findIndex(
+    lesson => String(lesson.id) === String(id)
+  );
 
-    let status = attendanceData;
-
-    if (attendanceData && typeof attendanceData === 'object') {
-        status = attendanceData.status || attendanceData.attendance || attendanceData.value || 'present';
-    }
-
-    if (typeof status !== 'string') {
-        status = 'present';
-    }
-
-    status = status.toLowerCase();
-
-    const allowedStatuses = ['present', 'absent', 'late', 'excused', 'not_marked'];
-
-    if (!allowedStatuses.includes(status)) {
-        status = 'present';
-    }
-
-    let note = '';
-    if (attendanceData && typeof attendanceData === 'object' && attendanceData.note !== undefined) {
-        note = String(attendanceData.note);
-    }
-
-    lesson.attendance = {
-        status: status,
-        markedAt: new Date().toISOString(),
-        note: note
+  if (index === -1) {
+    return {
+      success: false,
+      message: "Dars topilmadi."
     };
+  }
 
-    lesson.updatedAt = new Date().toISOString();
-    lesson.attendanceStatus = status;
+  lessons[index].attendanceTaken = true;
 
-    saveLessons();
+  lessons[index].attendanceAt =
+    new Date().toISOString();
 
-    return lesson;
+  lessons[index].warningSent = true;
+
+  saveLessons(lessons);
+
+  return {
+    success: true,
+    lesson: lessons[index]
+  };
 }
 
-// ============================================================
-// FINISH LESSON
-// ============================================================
+// ------------------------------------------------------------
+// FINISH
+// ------------------------------------------------------------
 
-function finishLesson(id, data = {}) {
-    loadLessons();
+function finishLesson(id) {
+  const lessons = readLessons();
 
-    const lesson = lessons.find(item => String(item.id) === String(id));
-    if (!lesson) return null;
+  const index = lessons.findIndex(
+    lesson => String(lesson.id) === String(id)
+  );
 
-    lesson.status = 'finished';
-    lesson.finishedAt = new Date().toISOString();
-    lesson.updatedAt = new Date().toISOString();
+  if (index === -1) {
+    return null;
+  }
 
-    if (data && typeof data === 'object') {
-        if (data.note !== undefined) lesson.finishNote = String(data.note);
-        if (data.homework !== undefined) lesson.homework = String(data.homework);
-        if (data.result !== undefined) lesson.result = data.result;
-        if (data.topic !== undefined) lesson.topic = String(data.topic);
-    }
+  lessons[index].finished = true;
 
-    saveLessons();
+  lessons[index].finishedAt =
+    new Date().toISOString();
 
-    return lesson;
+  saveLessons(lessons);
+
+  return lessons[index];
 }
 
-// ============================================================
-// ATTENDANCE CHECK
-// ============================================================
+// ------------------------------------------------------------
+// CHECK ATTENDANCE
+// ------------------------------------------------------------
 
-function checkAttendance() {
-    loadLessons();
-    const now = new Date();
+function checkAttendance(sendWarning) {
+  const lessons = readLessons();
 
-    for (const lesson of lessons) {
-        if (lesson.status === 'finished' || lesson.status === 'cancelled') continue;
+  const now = Date.now();
 
-        const lessonTime = parseLessonTime(lesson);
-        if (!lessonTime) continue;
+  let changed = false;
 
-        const difference = lessonTime.getTime() - now.getTime();
-        const fifteenMinutes = 15 * 60 * 1000;
-
-        if (difference <= fifteenMinutes && difference > 0 && lesson.warningSent !== true) {
-            lesson.warningSent = true;
-            lesson.warningSentAt = new Date().toISOString();
-            lesson.updatedAt = new Date().toISOString();
-
-            if (typeof warningCallback === 'function') {
-                try {
-                    warningCallback(lesson);
-                } catch (error) {
-                    console.error('warningCallback xatosi:', error.message);
-                }
-            }
-        }
-
-        if (difference <= 0 && lesson.status === 'scheduled') {
-            const duration = Number(lesson.duration) > 0 ? Number(lesson.duration) : 60;
-            const endTime = lessonTime.getTime() + duration * 60 * 1000;
-
-            if (now.getTime() >= endTime) {
-                lesson.status = 'missed';
-                if (lesson.attendance && lesson.attendance.status === 'not_marked') {
-                    lesson.attendance.status = 'absent';
-                    lesson.attendance.markedAt = new Date().toISOString();
-                }
-                lesson.updatedAt = new Date().toISOString();
-            }
-        }
+  for (const lesson of lessons) {
+    if (!lesson) {
+      continue;
     }
 
-    saveLessons();
-}
-
-// ============================================================
-// START SCHEDULER
-// ============================================================
-
-function startScheduler(callback) {
-    loadLessons();
-
-    if (typeof callback === 'function') warningCallback = callback;
-
-    if (schedulerInterval) {
-        clearInterval(schedulerInterval);
-        schedulerInterval = null;
+    if (!lesson.startTime) {
+      continue;
     }
 
-    try {
-        checkAttendance();
-    } catch (error) {
-        console.error('Scheduler tekshiruvida xato:', error.message);
+    if (lesson.attendanceTaken) {
+      continue;
     }
 
-    schedulerInterval = setInterval(() => {
+    if (lesson.finished) {
+      continue;
+    }
+
+    if (lesson.warningSent) {
+      continue;
+    }
+
+    const startTime = parseLessonTime(
+      lesson.startTime
+    );
+
+    if (!startTime) {
+      continue;
+    }
+
+    const elapsedMinutes =
+      (now - startTime) / 60000;
+
+    const duration =
+      Number(lesson.durationMinutes) > 0
+        ? Number(lesson.durationMinutes)
+        : 90;
+
+    // Dars boshlanganidan 15 daqiqa o'tgach
+    // davomat olinmagan bo'lsa ogohlantiramiz.
+
+    if (
+      elapsedMinutes >= 15 &&
+      elapsedMinutes <= duration
+    ) {
+      const warning = {
+        lessonId: lesson.id,
+
+        groupName:
+          lesson.groupName || "Noma'lum",
+
+        coachName:
+          lesson.coachName || "Noma'lum",
+
+        directorTelegramId:
+          lesson.directorTelegramId || null,
+
+        coachTelegramId:
+          lesson.coachTelegramId || null,
+
+        startTime: lesson.startTime,
+
+        message:
+          "⚠️ CHESARA DAVOMAT OGOHLANTIRISH\n\n" +
+          `📚 Guruh: ${
+            lesson.groupName || "Noma'lum"
+          }\n` +
+          `👨‍🏫 Ustoz: ${
+            lesson.coachName || "Noma'lum"
+          }\n` +
+          `⏰ Dars: ${
+            lesson.startTime
+          }\n\n` +
+          "Dars boshlanganiga 15 daqiqadan oshdi, " +
+          "ammo davomat hali qilinmagan."
+      };
+
+      // Avval warningSent ni belgilaymiz,
+      // shuning uchun har daqiqada qayta yuborilmaydi.
+
+      lesson.warningSent = true;
+
+      changed = true;
+
+      if (typeof sendWarning === "function") {
         try {
-            checkAttendance();
-        } catch (error) {
-            console.error('Scheduler xatosi:', error.message);
-        }
-    }, 60 * 1000);
+          const result = sendWarning(warning);
 
-    console.log('Lesson scheduler ishga tushdi.');
-    return true;
+          // Promise bo'lsa xatoni ushlaymiz
+          if (
+            result &&
+            typeof result.catch === "function"
+          ) {
+            result.catch(error => {
+              console.error(
+                "❌ Ogohlantirish yuborishda xatolik:",
+                error.message
+              );
+            });
+          }
+        } catch (error) {
+          console.error(
+            "❌ Ogohlantirish yuborishda xatolik:",
+            error.message
+          );
+        }
+      }
+    }
+  }
+
+  if (changed) {
+    saveLessons(lessons);
+  }
 }
 
-// ============================================================
+// ------------------------------------------------------------
+// SCHEDULER
+// ------------------------------------------------------------
+
+let schedulerStarted = false;
+
+let schedulerInterval = null;
+
+function startScheduler(sendWarning) {
+  if (schedulerStarted) {
+    console.log(
+      "ℹ️ CHESARA Scheduler allaqachon ishlayapti."
+    );
+
+    return;
+  }
+
+  schedulerStarted = true;
+
+  console.log(
+    "⏰ CHESARA Attendance Scheduler ishga tushdi."
+  );
+
+  // Birinchi tekshiruv darhol
+  try {
+    checkAttendance(sendWarning);
+  } catch (error) {
+    console.error(
+      "❌ Boshlang'ich scheduler xatosi:",
+      error.message
+    );
+  }
+
+  // Keyingi tekshiruvlar har 60 soniyada
+  schedulerInterval = setInterval(() => {
+    try {
+      checkAttendance(sendWarning);
+    } catch (error) {
+      console.error(
+        "❌ Scheduler xatosi:",
+        error.message
+      );
+    }
+  }, 60 * 1000);
+}
+
+// ------------------------------------------------------------
+// STOP SCHEDULER
+// ------------------------------------------------------------
+
+function stopScheduler() {
+  if (schedulerInterval) {
+    clearInterval(schedulerInterval);
+
+    schedulerInterval = null;
+  }
+
+  schedulerStarted = false;
+
+  console.log(
+    "🛑 CHESARA Scheduler to'xtatildi."
+  );
+}
+
+// ------------------------------------------------------------
 // EXPORTS
-// ============================================================
+// ------------------------------------------------------------
 
 module.exports = {
-    startScheduler,
-    getLessons,
-    getLesson,
-    addLesson,
-    markAttendance,
-    finishLesson
+  startScheduler,
+  stopScheduler,
+  getLessons,
+  getLesson,
+  addLesson,
+  markAttendance,
+  finishLesson,
+  checkAttendance
 };
