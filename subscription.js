@@ -1,6 +1,4 @@
-# subscription.js
 
-```javascript
 'use strict';
 
 const CHANNEL_USERNAME = '@uzchesara';
@@ -28,10 +26,7 @@ async function isSubscribed(bot, chatId) {
 }
 
 async function requireSubscription(bot, chatId) {
-  const subscribed = await isSubscribed(
-    bot,
-    chatId
-  );
+  const subscribed = await isSubscribed(bot, chatId);
 
   if (subscribed) {
     return true;
@@ -79,4 +74,4 @@ module.exports = {
   isSubscribed,
   requireSubscription
 };
-```
+
