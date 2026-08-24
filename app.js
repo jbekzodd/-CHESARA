@@ -1,821 +1,821 @@
 /* =========================================================
-   CHESARA — FRONTEND APPLICATION
+   CHESARA — NEXT FRONTEND MODULE
+   PASSPORT / ID / 3-DOT ACTIONS / ROLE UI
    ========================================================= */
 
-const CHESARA = {
-
-  state: {
-    currentPage: "dashboard",
-    user: {
-      name: "Administrator",
-      role: "Super Admin",
-      initials: "SA"
-    },
-
-    dashboard: null,
-
-    pages: [
-      "dashboard",
-      "students",
-      "teachers",
-      "groups",
-      "attendance",
-      "lessons",
-      "analysis",
-      "tournaments",
-      "news",
-      "reports",
-      "alerts",
-      "settings"
-    ]
-  },
+Object.assign(CHESARA, {
 
   /* =======================================================
-     INIT
-  ======================================================= */
+     CHESARA PASSPORT
+     ======================================================= */
 
-  async init() {
+  openPassport(id = "") {
 
-    console.log("♟ CHESARA frontend ishga tushdi.");
+    const passportId =
+      id ||
+      localStorage.getItem("chesara_passport_id") ||
+      "";
 
-    this.setupNavigation();
-    this.setupMobileNavigation();
-    this.setupGlobalButtons();
+    const modal = document.createElement("div");
 
-    await this.loadDashboard();
+    modal.className = "modal-overlay";
 
-    this.handleRoute();
+    modal.innerHTML = `
+      <div class="modal">
 
-    window.addEventListener("popstate", () => {
-      this.handleRoute();
-    });
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">
+              🪪 CHESARA PASPORTI
+            </div>
 
-  },
+            <div class="card-subtitle">
+              CHESARA ID orqali tekshirish
+            </div>
+          </div>
 
-  /* =======================================================
-     API
-  ======================================================= */
+          <button
+            class="more-button"
+            data-close-modal
+          >
+            ×
+          </button>
+        </div>
 
-  async api(url, options = {}) {
+        <div class="modal-body">
 
-    try {
+          <div class="form-group">
 
-      const response = await fetch(url, {
-        headers: {
-          "Content-Type": "application/json"
-        },
-        ...options
+            <label class="form-label">
+              CHESARA ID
+            </label>
+
+            <input
+              id="passportSearchInput"
+              type="text"
+              value="${this.escapeHtml(passportId)}"
+              placeholder="Masalan: CH-000001"
+            />
+
+          </div>
+
+          <button
+            class="btn btn-primary"
+            id="passportSearchButton"
+          >
+            🔎 Tekshirish
+          </button>
+
+          <div
+            id="passportResult"
+            style="margin-top:20px"
+          ></div>
+
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal
+      .querySelector("[data-close-modal]")
+      ?.addEventListener("click", () => {
+        modal.remove();
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      return await response.json();
-
-    } catch (error) {
-
-      console.error("CHESARA API ERROR:", error);
-
-      this.showToast(
-        "Server bilan bog‘lanishda muammo yuz berdi.",
-        "error"
-      );
-
-      return null;
-    }
-  },
-
-  /* =======================================================
-     DASHBOARD
-  ======================================================= */
-
-  async loadDashboard() {
-
-    const data = await this.api("/api/dashboard");
-
-    if (!data) return;
-
-    this.state.dashboard = data;
-
-    this.updateDashboard();
-
-  },
-
-  updateDashboard() {
-
-    const data = this.state.dashboard;
-
-    if (!data) return;
-
-    this.setText(
-      "[data-stat='students']",
-      data.students
-    );
-
-    this.setText(
-      "[data-stat='teachers']",
-      data.teachers
-    );
-
-    this.setText(
-      "[data-stat='groups']",
-      data.groups
-    );
-
-    this.setText(
-      "[data-stat='alerts']",
-      data.alerts
-    );
-
-    this.setText(
-      "[data-stat='present']",
-      data.attendance?.present ?? 0
-    );
-
-    this.setText(
-      "[data-stat='absent']",
-      data.attendance?.absent ?? 0
-    );
-
-    this.setText(
-      "[data-stat='late']",
-      data.attendance?.late ?? 0
-    );
-
-  },
-
-  /* =======================================================
-     NAVIGATION
-  ======================================================= */
-
-  setupNavigation() {
-
-    document.addEventListener("click", (event) => {
-
-      const link = event.target.closest(
-        "[data-page]"
-      );
-
-      if (!link) return;
-
-      event.preventDefault();
-
-      const page = link.dataset.page;
-
-      if (!this.state.pages.includes(page)) {
-        console.warn(
-          "CHESARA: noma’lum page:",
-          page
-        );
-        return;
-      }
-
-      this.navigate(page);
-
-    });
-
-  },
-
-  navigate(page) {
-
-    if (!this.state.pages.includes(page)) {
-      return;
-    }
-
-    this.state.currentPage = page;
-
-    const url =
-      page === "dashboard"
-        ? "/"
-        : `/?page=${page}`;
-
-    history.pushState(
-      { page },
-      "",
-      url
-    );
-
-    this.renderPage(page);
-
-    this.updateActiveNavigation(page);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-
-  },
-
-  handleRoute() {
-
-    const params =
-      new URLSearchParams(
-        window.location.search
-      );
-
-    const page =
-      params.get("page") || "dashboard";
-
-    this.state.currentPage =
-      this.state.pages.includes(page)
-        ? page
-        : "dashboard";
-
-    this.renderPage(
-      this.state.currentPage
-    );
-
-    this.updateActiveNavigation(
-      this.state.currentPage
-    );
-
-  },
-
-  /* =======================================================
-     PAGE RENDERING
-  ======================================================= */
-
-  renderPage(page) {
-
-    const pageTitle =
-      document.querySelector(
-        "[data-page-title]"
-      );
-
-    if (pageTitle) {
-
-      pageTitle.textContent =
-        this.getPageTitle(page);
-
-    }
-
-    document
-      .querySelectorAll("[data-page-view]")
-      .forEach((element) => {
-
-        element.classList.remove("active");
-
-        if (
-          element.dataset.pageView === page
-        ) {
-          element.classList.add("active");
-        }
-
-      });
-
-    this.updatePageContent(page);
-
-  },
-
-  getPageTitle(page) {
-
-    const titles = {
-
-      dashboard: "Boshqaruv paneli",
-
-      students:
-        "O‘quvchilar",
-
-      teachers:
-        "Ustozlar",
-
-      groups:
-        "Guruhlar",
-
-      attendance:
-        "Davomat",
-
-      lessons:
-        "Darslar",
-
-      analysis:
-        "AI O‘yin tahlili",
-
-      tournaments:
-        "Turnirlar",
-
-      news:
-        "Shaxmat yangiliklari",
-
-      reports:
-        "Hisobotlar",
-
-      alerts:
-        "Ogohlantirishlar",
-
-      settings:
-        "Sozlamalar"
-
-    };
-
-    return titles[page] ||
-      "CHESARA";
-  },
-
-  updatePageContent(page) {
-
-    if (page === "analysis") {
-      this.initAnalysisPage();
-    }
-
-    if (page === "attendance") {
-      this.initAttendancePage();
-    }
-
-    if (page === "reports") {
-      this.initReportsPage();
-    }
-
-    if (page === "alerts") {
-      this.initAlertsPage();
-    }
-
-  },
-
-  /* =======================================================
-     ACTIVE NAVIGATION
-  ======================================================= */
-
-  updateActiveNavigation(page) {
-
-    document
-      .querySelectorAll(
-        "[data-page]"
-      )
-      .forEach((element) => {
-
-        element.classList.toggle(
-          "active",
-          element.dataset.page === page
-        );
-
-      });
-
-  },
-
-  /* =======================================================
-     MOBILE
-  ======================================================= */
-
-  setupMobileNavigation() {
-
-    const menuButton =
-      document.querySelector(
-        "[data-mobile-menu]"
-      );
-
-    const sidebar =
-      document.querySelector(
-        "[data-sidebar]"
-      );
-
-    const overlay =
-      document.querySelector(
-        "[data-sidebar-overlay]"
-      );
-
-    if (!menuButton || !sidebar) {
-      return;
-    }
-
-    menuButton.addEventListener(
-      "click",
-      () => {
-
-        sidebar.classList.toggle(
-          "mobile-open"
-        );
-
-        if (overlay) {
-
-          overlay.classList.toggle(
-            "visible"
+    modal
+      .querySelector("#passportSearchButton")
+      ?.addEventListener("click", async () => {
+
+        const input =
+          modal.querySelector(
+            "#passportSearchInput"
           );
 
-        }
+        const id =
+          input?.value?.trim();
 
-        document.body.classList.toggle(
-          "menu-open"
-        );
-
-      }
-    );
-
-    if (overlay) {
-
-      overlay.addEventListener(
-        "click",
-        () => {
-
-          sidebar.classList.remove(
-            "mobile-open"
-          );
-
-          overlay.classList.remove(
-            "visible"
-          );
-
-          document.body.classList.remove(
-            "menu-open"
-          );
-
-        }
-      );
-
-    }
-
-  },
-
-  /* =======================================================
-     GLOBAL BUTTONS
-  ======================================================= */
-
-  setupGlobalButtons() {
-
-    document.addEventListener(
-      "click",
-      (event) => {
-
-        const button =
-          event.target.closest(
-            "[data-action]"
-          );
-
-        if (!button) return;
-
-        const action =
-          button.dataset.action;
-
-        switch (action) {
-
-          case "refresh":
-            this.loadDashboard();
-            this.showToast(
-              "Ma’lumotlar yangilanmoqda..."
-            );
-            break;
-
-          case "open-analysis":
-            this.navigate("analysis");
-            break;
-
-          case "open-reports":
-            this.navigate("reports");
-            break;
-
-          case "open-attendance":
-            this.navigate("attendance");
-            break;
-
-          case "logout":
-            this.logout();
-            break;
-
-          default:
-            console.warn(
-              "Noma’lum action:",
-              action
-            );
-
-        }
-
-      }
-    );
-
-  },
-
-  /* =======================================================
-     AI ANALYSIS
-  ======================================================= */
-
-  initAnalysisPage() {
-
-    const form =
-      document.querySelector(
-        "[data-analysis-form]"
-      );
-
-    if (!form || form.dataset.ready) {
-      return;
-    }
-
-    form.dataset.ready = "true";
-
-    form.addEventListener(
-      "submit",
-      async (event) => {
-
-        event.preventDefault();
-
-        const source =
-          form.querySelector(
-            "[name='source']"
-          )?.value || "manual";
-
-        const game =
-          form.querySelector(
-            "[name='game']"
-          )?.value || "";
-
-        const player =
-          form.querySelector(
-            "[name='player']"
-          )?.value || "O‘yinchi";
-
-        if (!game.trim()) {
+        if (!id) {
 
           this.showToast(
-            "Avval PGN yoki o‘yin ma’lumotlarini kiriting.",
+            "CHESARA ID kiriting.",
             "error"
           );
 
           return;
         }
 
-        this.showToast(
-          "O‘yin CHESARA AI tahliliga yuborilmoqda..."
-        );
-
-        const result =
-          await this.api(
-            "/api/chess/analyze",
-            {
-              method: "POST",
-
-              body: JSON.stringify({
-                source,
-                game,
-                player
-              })
-
-            }
-          );
-
-        if (!result) return;
-
-        this.renderAnalysisResult(
-          result
-        );
-
-      }
-    );
-
-  },
-
-  renderAnalysisResult(result) {
-
-    const container =
-      document.querySelector(
-        "[data-analysis-result]"
-      );
-
-    if (!container) return;
-
-    container.innerHTML = `
-
-      <div class="chesara-analysis-result">
-
-        <div class="analysis-status">
-          <span class="status-dot"></span>
-
-          <div>
-            <strong>
-              O‘yin qabul qilindi
-            </strong>
-
-            <small>
-              CHESARA AI Intelligence
-            </small>
-          </div>
-        </div>
-
-        <div class="analysis-grid">
-
-          <div class="analysis-card">
-            <span>Accuracy</span>
-            <strong>
-              ${result.analysis?.accuracy ?? "—"}
-            </strong>
-          </div>
-
-          <div class="analysis-card">
-            <span>Blunders</span>
-            <strong>
-              ${result.analysis?.blunders ?? 0}
-            </strong>
-          </div>
-
-          <div class="analysis-card">
-            <span>Mistakes</span>
-            <strong>
-              ${result.analysis?.mistakes ?? 0}
-            </strong>
-          </div>
-
-          <div class="analysis-card">
-            <span>Opening</span>
-            <strong>
-              ${result.opening?.name ?? "—"}
-            </strong>
-          </div>
-
-        </div>
-
-        <div class="analysis-message">
-          ${result.message || ""}
-        </div>
-
-      </div>
-
-    `;
-
-  },
-
-  /* =======================================================
-     ATTENDANCE
-  ======================================================= */
-
-  initAttendancePage() {
-
-    document
-      .querySelectorAll(
-        "[data-attendance-action]"
-      )
-      .forEach((button) => {
-
-        if (button.dataset.ready) {
-          return;
-        }
-
-        button.dataset.ready = "true";
-
-        button.addEventListener(
-          "click",
-          () => {
-
-            const action =
-              button.dataset.attendanceAction;
-
-            this.showToast(
-              `Davomat amali: ${action}`
-            );
-
-          }
+        await this.searchPassport(
+          id,
+          modal.querySelector(
+            "#passportResult"
+          )
         );
 
       });
 
   },
 
-  /* =======================================================
-     REPORTS
-  ======================================================= */
+  async searchPassport(id, container) {
 
-  initReportsPage() {
+    if (!container) return;
 
-    const button =
-      document.querySelector(
-        "[data-generate-report]"
+    container.innerHTML = `
+      <div class="loading">
+        <div class="spinner"></div>
+      </div>
+    `;
+
+    /*
+      Backend endpoint mavjud bo'lmasa,
+      foydalanuvchiga xato ko'rsatamiz.
+      Soxta ma'lumot yaratmaymiz.
+    */
+
+    const result =
+      await this.api(
+        `/api/passport/${encodeURIComponent(id)}`
       );
 
-    if (!button || button.dataset.ready) {
+    if (!result) {
+
+      container.innerHTML = `
+        <div class="alert alert-warning">
+          🪪 Bu CHESARA ID bo‘yicha
+          ma’lumot topilmadi yoki Passport
+          API hali ulanmagan.
+        </div>
+      `;
+
       return;
     }
 
-    button.dataset.ready = "true";
+    this.renderPassport(
+      result,
+      container
+    );
+
+  },
+
+  renderPassport(data, container) {
+
+    const passport =
+      data.passport ||
+      data.user ||
+      data;
+
+    const photo =
+      passport.photo ||
+      passport.image ||
+      "";
+
+    const name =
+      passport.fullName ||
+      passport.name ||
+      "Noma’lum";
+
+    const id =
+      passport.chesaraId ||
+      passport.id ||
+      "—";
+
+    const role =
+      passport.role ||
+      passport.status ||
+      "—";
+
+    container.innerHTML = `
+
+      <div class="passport">
+
+        <div class="passport-header">
+
+          <div class="passport-brand">
+
+            <div class="logo-icon">
+              ♟
+            </div>
+
+            <div>
+
+              <div class="passport-brand-title">
+                CHESARA
+              </div>
+
+              <div class="passport-brand-subtitle">
+                SHAXMAT PASPORTI
+              </div>
+
+            </div>
+
+          </div>
+
+          <span class="badge badge-green">
+            ✓ TEKSHIRILDI
+          </span>
+
+        </div>
+
+        <div class="passport-body">
+
+          <div class="passport-profile">
+
+            <div class="passport-photo">
+
+              ${
+                photo
+                  ? `<img
+                       src="${this.escapeAttribute(photo)}"
+                       alt="CHESARA Passport"
+                     >`
+                  : `<div class="flex-center"
+                          style="width:100%;height:100%;font-size:42px">
+                       ♟
+                     </div>`
+              }
+
+            </div>
+
+            <div>
+
+              <div class="passport-id">
+                CHESARA ID:
+              </div>
+
+              <div class="passport-id">
+                <strong>
+                  ${this.escapeHtml(id)}
+                </strong>
+              </div>
+
+              <div class="passport-name">
+                ${this.escapeHtml(name)}
+              </div>
+
+              <span class="passport-role">
+                ${this.escapeHtml(role)}
+              </span>
+
+            </div>
+
+          </div>
+
+          <div class="passport-grid">
+
+            ${this.passportField(
+              "Tug‘ilgan sana",
+              passport.birthDate
+            )}
+
+            ${this.passportField(
+              "Jinsi",
+              passport.gender
+            )}
+
+            ${this.passportField(
+              "Telefon",
+              passport.phone
+            )}
+
+            ${this.passportField(
+              "Hudud",
+              passport.region
+            )}
+
+            ${this.passportField(
+              "CHESARA statusi",
+              passport.chesaraStatus ||
+              passport.status
+            )}
+
+            ${this.passportField(
+              "Faoliyat turi",
+              passport.activityType
+            )}
+
+          </div>
+
+          ${
+            passport.certificates?.length
+              ? `
+                <div style="margin-top:20px">
+
+                  <strong>
+                    🎓 Sertifikatlar
+                  </strong>
+
+                  <div class="certificate-list">
+
+                    ${passport.certificates
+                      .map(cert => `
+                        <div class="certificate">
+                          ${this.escapeHtml(
+                            cert.name ||
+                            cert.title ||
+                            "Sertifikat"
+                          )}
+                        </div>
+                      `)
+                      .join("")}
+
+                  </div>
+
+                </div>
+              `
+              : ""
+          }
+
+        </div>
+
+      </div>
+    `;
+
+  },
+
+  passportField(label, value) {
+
+    return `
+      <div class="passport-field">
+
+        <div class="passport-field-label">
+          ${this.escapeHtml(label)}
+        </div>
+
+        <div class="passport-field-value">
+          ${this.escapeHtml(
+            value || "—"
+          )}
+        </div>
+
+      </div>
+    `;
+
+  },
+
+  /* =======================================================
+     THREE DOT MENU
+     ======================================================= */
+
+  createMoreMenu(options = {}) {
+
+    const menu =
+      document.createElement("div");
+
+    menu.className = "more-menu";
+
+    const button =
+      document.createElement("button");
+
+    button.className =
+      "more-button";
+
+    button.type = "button";
+
+    button.textContent = "⋮";
+
+    const dropdown =
+      document.createElement("div");
+
+    dropdown.className =
+      "more-dropdown hidden";
+
+    const actions = [
+      {
+        key: "view",
+        label: "👁 Ko‘rish"
+      },
+      {
+        key: "edit",
+        label: "✏️ Tahrirlash"
+      },
+      {
+        key: "delete",
+        label: "🗑 O‘chirish",
+        danger: true
+      }
+    ];
+
+    actions.forEach(action => {
+
+      if (
+        options[action.key] === false
+      ) {
+        return;
+      }
+
+      const item =
+        document.createElement("button");
+
+      item.type = "button";
+
+      item.textContent =
+        action.label;
+
+      if (action.danger) {
+        item.classList.add("danger");
+      }
+
+      item.addEventListener(
+        "click",
+        event => {
+
+          event.stopPropagation();
+
+          dropdown.classList.add(
+            "hidden"
+          );
+
+          if (
+            typeof options[action.key]
+            === "function"
+          ) {
+            options[action.key]();
+          }
+
+        }
+      );
+
+      dropdown.appendChild(item);
+
+    });
 
     button.addEventListener(
       "click",
-      () => {
+      event => {
 
-        this.showToast(
-          "Hisobot shakllantirish moduli ishga tushirildi."
+        event.stopPropagation();
+
+        document
+          .querySelectorAll(
+            ".more-dropdown"
+          )
+          .forEach(element => {
+
+            if (
+              element !== dropdown
+            ) {
+              element.classList.add(
+                "hidden"
+              );
+            }
+
+          });
+
+        dropdown.classList.toggle(
+          "hidden"
         );
 
       }
     );
 
+    menu.appendChild(button);
+    menu.appendChild(dropdown);
+
+    return menu;
+
   },
 
   /* =======================================================
-     ALERTS
-  ======================================================= */
+     GENERIC EDIT MODAL
+     ======================================================= */
 
-  initAlertsPage() {
+  openEditModal(title, fields = {}, onSave) {
 
-    const alerts =
-      document.querySelectorAll(
-        "[data-alert]"
-      );
+    const modal =
+      document.createElement("div");
 
-    alerts.forEach((alert) => {
+    modal.className =
+      "modal-overlay";
 
-      alert.addEventListener(
+    const fieldHtml =
+      Object.entries(fields)
+        .map(([key, value]) => {
+
+          return `
+            <div class="form-group">
+
+              <label class="form-label">
+                ${this.escapeHtml(key)}
+              </label>
+
+              <input
+                class="form-control"
+                data-edit-field="${this.escapeAttribute(key)}"
+                value="${this.escapeAttribute(
+                  value ?? ""
+                )}"
+              >
+
+            </div>
+          `;
+
+        })
+        .join("");
+
+    modal.innerHTML = `
+
+      <div class="modal">
+
+        <div class="modal-header">
+
+          <div class="modal-title">
+            ✏️ ${this.escapeHtml(title)}
+          </div>
+
+          <button
+            class="more-button"
+            data-close
+          >
+            ×
+          </button>
+
+        </div>
+
+        <div class="modal-body">
+
+          ${fieldHtml}
+
+        </div>
+
+        <div class="modal-footer">
+
+          <button
+            class="btn btn-secondary"
+            data-close
+          >
+            Bekor qilish
+          </button>
+
+          <button
+            class="btn btn-primary"
+            data-save
+          >
+            💾 Saqlash
+          </button>
+
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal
+      .querySelectorAll("[data-close]")
+      .forEach(button => {
+
+        button.addEventListener(
+          "click",
+          () => modal.remove()
+        );
+
+      });
+
+    modal
+      .querySelector("[data-save]")
+      ?.addEventListener(
         "click",
-        () => {
+        async () => {
 
-          alert.classList.toggle(
-            "read"
-          );
+          const result = {};
+
+          modal
+            .querySelectorAll(
+              "[data-edit-field]"
+            )
+            .forEach(input => {
+
+              result[
+                input.dataset.editField
+              ] = input.value;
+
+            });
+
+          if (
+            typeof onSave ===
+            "function"
+          ) {
+
+            await onSave(result);
+
+          }
+
+          modal.remove();
 
         }
       );
+
+  },
+
+  /* =======================================================
+     CONFIRM DELETE
+     ======================================================= */
+
+  async confirmDelete(
+    title = "O‘chirish",
+    message = "Haqiqatan ham o‘chirmoqchimisiz?"
+  ) {
+
+    return new Promise(resolve => {
+
+      const modal =
+        document.createElement("div");
+
+      modal.className =
+        "modal-overlay";
+
+      modal.innerHTML = `
+
+        <div class="modal"
+             style="max-width:420px">
+
+          <div class="modal-header">
+
+            <div class="modal-title">
+              🗑 ${this.escapeHtml(title)}
+            </div>
+
+          </div>
+
+          <div class="modal-body">
+
+            <div class="alert alert-danger">
+              ${this.escapeHtml(message)}
+            </div>
+
+          </div>
+
+          <div class="modal-footer">
+
+            <button
+              class="btn btn-secondary"
+              data-no
+            >
+              Bekor qilish
+            </button>
+
+            <button
+              class="btn btn-danger"
+              data-yes
+            >
+              🗑 O‘chirish
+            </button>
+
+          </div>
+
+        </div>
+      `;
+
+      document.body.appendChild(
+        modal
+      );
+
+      modal
+        .querySelector("[data-no]")
+        .addEventListener(
+          "click",
+          () => {
+
+            modal.remove();
+            resolve(false);
+
+          }
+        );
+
+      modal
+        .querySelector("[data-yes]")
+        .addEventListener(
+          "click",
+          () => {
+
+            modal.remove();
+            resolve(true);
+
+          }
+        );
 
     });
 
   },
 
   /* =======================================================
-     LOGOUT
-  ======================================================= */
+     CHESARA ID SEARCH
+     ======================================================= */
 
-  logout() {
+  async searchChesaraId(id) {
 
-    localStorage.removeItem(
-      "chesara_session"
-    );
+    const value =
+      String(id || "").trim();
 
-    this.showToast(
-      "Sessiya yakunlandi."
-    );
+    if (!value) {
 
-    setTimeout(() => {
-      window.location.reload();
-    }, 700);
+      this.showToast(
+        "CHESARA ID kiriting.",
+        "error"
+      );
+
+      return null;
+
+    }
+
+    const result =
+      await this.api(
+        `/api/passport/${encodeURIComponent(value)}`
+      );
+
+    if (!result) {
+
+      this.showToast(
+        "CHESARA ID topilmadi.",
+        "error"
+      );
+
+      return null;
+
+    }
+
+    return result;
 
   },
 
   /* =======================================================
-     HELPERS
-  ======================================================= */
+     SECURITY HELPERS
+     ======================================================= */
 
-  setText(selector, value) {
+  escapeHtml(value) {
 
-    const element =
-      document.querySelector(selector);
-
-    if (element) {
-      element.textContent = value;
-    }
+    return String(
+      value ?? ""
+    )
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
 
   },
 
-  showToast(message, type = "success") {
+  escapeAttribute(value) {
 
-    let container =
-      document.querySelector(
-        ".chesara-toast-container"
-      );
-
-    if (!container) {
-
-      container =
-        document.createElement("div");
-
-      container.className =
-        "chesara-toast-container";
-
-      document.body.appendChild(
-        container
-      );
-
-    }
-
-    const toast =
-      document.createElement("div");
-
-    toast.className =
-      `chesara-toast ${type}`;
-
-    toast.textContent = message;
-
-    container.appendChild(toast);
-
-    setTimeout(() => {
-
-      toast.classList.add(
-        "hide"
-      );
-
-      setTimeout(() => {
-        toast.remove();
-      }, 300);
-
-    }, 3000);
+    return this.escapeHtml(
+      value
+    );
 
   }
 
-};
+});
 
 
 /* =========================================================
-   START
+   GLOBAL CHESARA BUTTONS
    ========================================================= */
 
 document.addEventListener(
-  "DOMContentLoaded",
+  "click",
+  event => {
+
+    const button =
+      event.target.closest(
+        "[data-chesara-action]"
+      );
+
+    if (!button) return;
+
+    const action =
+      button.dataset.chesaraAction;
+
+    if (
+      action === "passport"
+    ) {
+
+      CHESARA.openPassport();
+
+    }
+
+  }
+);
+
+
+/* =========================================================
+   CLOSE THREE-DOT MENUS
+   ========================================================= */
+
+document.addEventListener(
+  "click",
   () => {
-    CHESARA.init();
+
+    document
+      .querySelectorAll(
+        ".more-dropdown"
+      )
+      .forEach(menu => {
+
+        menu.classList.add(
+          "hidden"
+        );
+
+      });
+
   }
 );
