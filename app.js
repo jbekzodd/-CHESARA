@@ -1,130 +1,431 @@
-/* =========================================================
-   CHESARA — FRONTEND APPLICATION
-   FULL VERSION
-   Dashboard + Navigation + AI + Attendance + Reports
-   + CHESARA ID + PASSPORT + 3-DOT ACTIONS
-   ========================================================= */
+'use strict';
+
+/*
+============================================================
+ CHESARA FRONTEND APPLICATION
+ v2 — Telegram + Role + Super Admin + Actions
+============================================================
+*/
 
 const CHESARA = {
 
-  /* =======================================================
-     STATE
-     ======================================================= */
+  SUPER_ADMIN: {
+    telegramId: 1148401454,
+    username: 'jovliyev_bekzod'
+  },
 
   state: {
-    currentPage: "dashboard",
+    currentPage: 'dashboard',
 
     user: {
-      name: "Administrator",
-      role: "Super Admin",
-      initials: "SA"
+      id: null,
+      telegramId: null,
+      username: '',
+      name: 'Mehmon',
+      role: null,
+      roleSelected: false,
+      isSuperAdmin: false,
+      teacherType: null,
+      passportId: null
     },
 
     dashboard: null,
 
     pages: [
-      "dashboard",
-      "students",
-      "teachers",
-      "groups",
-      "attendance",
-      "lessons",
-      "analysis",
-      "tournaments",
-      "news",
-      "reports",
-      "alerts",
-      "settings",
-      "passport"
+      'dashboard',
+      'students',
+      'teachers',
+      'groups',
+      'attendance',
+      'lessons',
+      'analysis',
+      'tournaments',
+      'news',
+      'reports',
+      'alerts',
+      'settings',
+      'passport',
+      'centers',
+      'courses'
     ]
   },
 
-  /* =======================================================
-     INIT
-     ======================================================= */
+  /*
+  ============================================================
+  INIT
+  ============================================================
+  */
 
   async init() {
 
-    console.log("♟ CHESARA frontend ishga tushdi.");
-
-    this.setupNavigation();
-    this.setupMobileNavigation();
-    this.setupGlobalButtons();
-    this.setupMoreMenus();
-    this.setupPassportButtons();
-
-    await this.loadDashboard();
-
-    this.handleRoute();
-
-    window.addEventListener(
-      "popstate",
-      () => this.handleRoute()
-    );
-
-  },
-
-  /* =======================================================
-     API
-     ======================================================= */
-
-  async api(url, options = {}) {
+    console.log('♟ CHESARA frontend ishga tushmoqda...');
 
     try {
 
-      const response = await fetch(url, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(options.headers || {})
-        },
-        ...options
-      });
+      this.initTelegram();
 
-      if (!response.ok) {
-        throw new Error(
-          `HTTP ${response.status}`
-        );
-      }
+      this.loadLocalUser();
 
-      const contentType =
-        response.headers.get("content-type") || "";
+      await this.loadCurrentUser();
 
-      if (
-        contentType.includes("application/json")
-      ) {
-        return await response.json();
-      }
+      this.setupNavigation();
 
-      return await response.text();
+      this.setupMobileNavigation();
+
+      this.setupGlobalButtons();
+
+      this.setupThreeDotActions();
+
+      this.handleRoute();
+
+      await this.loadDashboard();
+
+      this.updateUserInterface();
+
+      console.log('✅ CHESARA frontend tayyor.');
 
     } catch (error) {
 
       console.error(
-        "CHESARA API ERROR:",
+        '❌ CHESARA INIT ERROR:',
         error
       );
 
       this.showToast(
-        "Server bilan bog‘lanishda muammo yuz berdi.",
-        "error"
+        'CHESARA ishga tushirishda xatolik.',
+        'error'
+      );
+    }
+
+  },
+
+  /*
+  ============================================================
+  TELEGRAM WEB APP
+  ============================================================
+  */
+
+  initTelegram() {
+
+    const tg =
+      window.Telegram &&
+      window.Telegram.WebApp;
+
+    if (!tg) {
+
+      console.log(
+        'ℹ️ Telegram WebApp topilmadi. Oddiy brauzer rejimi.'
+      );
+
+      return;
+    }
+
+    try {
+
+      tg.ready();
+
+      tg.expand();
+
+      this.telegram = tg;
+
+      const tgUser =
+        tg.initDataUnsafe?.user;
+
+      if (tgUser) {
+
+        this.state.user.id =
+          tgUser.id || null;
+
+        this.state.user.telegramId =
+          tgUser.id || null;
+
+        this.state.user.username =
+          tgUser.username || '';
+
+        this.state.user.name =
+          [
+            tgUser.first_name || '',
+            tgUser.last_name || ''
+          ]
+            .join(' ')
+            .trim() || 'Foydalanuvchi';
+
+        this.state.user.isSuperAdmin =
+          this.isSuperAdmin(tgUser);
+
+      }
+
+      console.log(
+        'Telegram user:',
+        this.state.user
+      );
+
+    } catch (error) {
+
+      console.error(
+        'Telegram WebApp xatosi:',
+        error
+      );
+
+    }
+
+  },
+
+  /*
+  ============================================================
+  LOCAL USER
+  ============================================================
+  */
+
+  loadLocalUser() {
+
+    try {
+
+      const saved =
+        localStorage.getItem(
+          'chesara_user'
+        );
+
+      if (!saved) return;
+
+      const user =
+        JSON.parse(saved);
+
+      this.state.user = {
+        ...this.state.user,
+        ...user
+      };
+
+    } catch (error) {
+
+      console.warn(
+        'Local user o‘qilmadi:',
+        error
+      );
+
+    }
+
+  },
+
+  saveLocalUser() {
+
+    try {
+
+      localStorage.setItem(
+        'chesara_user',
+        JSON.stringify(
+          this.state.user
+        )
+      );
+
+    } catch (error) {
+
+      console.warn(
+        'Local user saqlanmadi:',
+        error
+      );
+
+    }
+
+  },
+
+  /*
+  ============================================================
+  SUPER ADMIN
+  ============================================================
+  */
+
+  isSuperAdmin(user) {
+
+    if (!user) return false;
+
+    const id =
+      Number(
+        user.id ||
+        user.telegramId ||
+        0
+      );
+
+    const username =
+      String(
+        user.username || ''
+      )
+        .replace('@', '')
+        .toLowerCase();
+
+    return (
+      id ===
+        this.SUPER_ADMIN.telegramId ||
+      username ===
+        this.SUPER_ADMIN.username
+          .toLowerCase()
+    );
+
+  },
+
+  /*
+  ============================================================
+  CURRENT USER
+  ============================================================
+  */
+
+  async loadCurrentUser() {
+
+    const tg =
+      window.Telegram &&
+      window.Telegram.WebApp;
+
+    let data = null;
+
+    try {
+
+      if (
+        this.state.user.telegramId
+      ) {
+
+        data =
+          await this.api(
+            `/api/user/${this.state.user.telegramId}`
+          );
+
+      }
+
+    } catch (error) {
+
+      console.warn(
+        'User API mavjud emas yoki ishlamadi.',
+        error
+      );
+
+    }
+
+    if (data?.user) {
+
+      this.state.user = {
+        ...this.state.user,
+        ...data.user
+      };
+
+    }
+
+    /*
+    SUPER ADMIN DOIMO ANIQLANADI
+    */
+
+    this.state.user.isSuperAdmin =
+      this.isSuperAdmin(
+        this.state.user
+      );
+
+    if (
+      this.state.user.isSuperAdmin
+    ) {
+
+      this.state.user.role =
+        'super_admin';
+
+      this.state.user.roleSelected =
+        true;
+
+    }
+
+    this.saveLocalUser();
+
+  },
+
+  /*
+  ============================================================
+  API
+  ============================================================
+  */
+
+  async api(
+    url,
+    options = {}
+  ) {
+
+    try {
+
+      const response =
+        await fetch(
+          url,
+          {
+            headers: {
+              'Content-Type':
+                'application/json',
+
+              ...(options.headers || {})
+            },
+
+            ...options
+          }
+        );
+
+      if (!response.ok) {
+
+        throw new Error(
+          `HTTP ${response.status}`
+        );
+
+      }
+
+      const text =
+        await response.text();
+
+      if (!text) return {};
+
+      try {
+
+        return JSON.parse(text);
+
+      } catch {
+
+        return {
+          success: true,
+          text
+        };
+
+      }
+
+    } catch (error) {
+
+      console.error(
+        'CHESARA API ERROR:',
+        url,
+        error
       );
 
       return null;
+
     }
+
   },
 
-  /* =======================================================
-     DASHBOARD
-     ======================================================= */
+  /*
+  ============================================================
+  DASHBOARD
+  ============================================================
+  */
 
   async loadDashboard() {
 
     const data =
-      await this.api("/api/dashboard");
+      await this.api(
+        '/api/dashboard'
+      );
 
-    if (!data) return;
+    if (!data) {
 
-    this.state.dashboard = data;
+      console.log(
+        'Dashboard API hozircha mavjud emas.'
+      );
+
+      return;
+
+    }
+
+    this.state.dashboard =
+      data;
 
     this.updateDashboard();
 
@@ -174,19 +475,21 @@ const CHESARA = {
 
   },
 
-  /* =======================================================
-     NAVIGATION
-     ======================================================= */
+  /*
+  ============================================================
+  NAVIGATION
+  ============================================================
+  */
 
   setupNavigation() {
 
     document.addEventListener(
-      "click",
+      'click',
       event => {
 
         const link =
           event.target.closest(
-            "[data-page]"
+            '[data-page]'
           );
 
         if (!link) return;
@@ -197,11 +500,13 @@ const CHESARA = {
           link.dataset.page;
 
         if (
-          !this.state.pages.includes(page)
+          !this.state.pages.includes(
+            page
+          )
         ) {
 
           console.warn(
-            "CHESARA: noma’lum page:",
+            'Noma’lum page:',
             page
           );
 
@@ -218,8 +523,11 @@ const CHESARA = {
   navigate(page) {
 
     if (
-      !this.state.pages.includes(page)
+      !this.state.pages.includes(
+        page
+      )
     ) {
+
       return;
     }
 
@@ -227,13 +535,13 @@ const CHESARA = {
       page;
 
     const url =
-      page === "dashboard"
-        ? "/"
-        : `/?page=${page}`;
+      page === 'dashboard'
+        ? '/'
+        : `/?page=${encodeURIComponent(page)}`;
 
     history.pushState(
       { page },
-      "",
+      '',
       url
     );
 
@@ -245,7 +553,7 @@ const CHESARA = {
 
     window.scrollTo({
       top: 0,
-      behavior: "smooth"
+      behavior: 'smooth'
     });
 
   },
@@ -257,264 +565,281 @@ const CHESARA = {
         window.location.search
       );
 
+    const requested =
+      params.get('page') ||
+      'dashboard';
+
     const page =
-      params.get("page") ||
-      "dashboard";
+      this.state.pages.includes(
+        requested
+      )
+        ? requested
+        : 'dashboard';
 
     this.state.currentPage =
-      this.state.pages.includes(page)
-        ? page
-        : "dashboard";
+      page;
 
-    this.renderPage(
-      this.state.currentPage
-    );
+    this.renderPage(page);
 
     this.updateActiveNavigation(
-      this.state.currentPage
+      page
     );
 
   },
 
-  /* =======================================================
-     PAGE TITLES
-     ======================================================= */
-
-  getPageTitle(page) {
-
-    const titles = {
-
-      dashboard:
-        "Boshqaruv paneli",
-
-      students:
-        "O‘quvchilar",
-
-      teachers:
-        "Ustozlar",
-
-      groups:
-        "Guruhlar",
-
-      attendance:
-        "Davomat",
-
-      lessons:
-        "Darslar",
-
-      analysis:
-        "AI O‘yin tahlili",
-
-      tournaments:
-        "Turnirlar",
-
-      news:
-        "Shaxmat yangiliklari",
-
-      reports:
-        "Hisobotlar",
-
-      alerts:
-        "Ogohlantirishlar",
-
-      settings:
-        "Sozlamalar",
-
-      passport:
-        "CHESARA Passport"
-
-    };
-
-    return (
-      titles[page] ||
-      "CHESARA"
-    );
-
-  },
-
-  /* =======================================================
-     PAGE RENDER
-     ======================================================= */
+  /*
+  ============================================================
+  PAGE RENDER
+  ============================================================
+  */
 
   renderPage(page) {
 
-    const pageTitle =
+    const title =
       document.querySelector(
-        "[data-page-title]"
+        '[data-page-title]'
       );
 
-    if (pageTitle) {
+    if (title) {
 
-      pageTitle.textContent =
+      title.textContent =
         this.getPageTitle(page);
 
     }
 
     document
       .querySelectorAll(
-        "[data-page-view]"
+        '[data-page-view]'
       )
-      .forEach(element => {
+      .forEach(
+        element => {
 
-        element.classList.remove(
-          "active"
-        );
-
-        if (
-          element.dataset.pageView ===
-          page
-        ) {
-
-          element.classList.add(
-            "active"
+          element.classList.remove(
+            'active'
           );
 
+          if (
+            element.dataset.pageView ===
+            page
+          ) {
+
+            element.classList.add(
+              'active'
+            );
+
+          }
+
         }
+      );
 
-      });
+    this.updatePageContent(
+      page
+    );
 
-    this.updatePageContent(page);
+  },
+
+  getPageTitle(page) {
+
+    const titles = {
+
+      dashboard:
+        'Boshqaruv paneli',
+
+      students:
+        'O‘quvchilar',
+
+      teachers:
+        'Ustozlar',
+
+      groups:
+        'Guruhlar',
+
+      attendance:
+        'Davomat',
+
+      lessons:
+        'Darslar',
+
+      analysis:
+        'AI O‘yin tahlili',
+
+      tournaments:
+        'Turnirlar',
+
+      news:
+        'Yangiliklar',
+
+      reports:
+        'Hisobotlar',
+
+      alerts:
+        'Ogohlantirishlar',
+
+      settings:
+        'Sozlamalar',
+
+      passport:
+        'CHESARA Pasporti',
+
+      centers:
+        'Markazlar',
+
+      courses:
+        'Kurslar'
+
+    };
+
+    return (
+      titles[page] ||
+      'CHESARA'
+    );
 
   },
 
   updatePageContent(page) {
 
     if (
-      page === "analysis"
+      page === 'analysis'
     ) {
+
       this.initAnalysisPage();
+
     }
 
     if (
-      page === "attendance"
+      page === 'attendance'
     ) {
+
       this.initAttendancePage();
+
     }
 
     if (
-      page === "reports"
+      page === 'reports'
     ) {
+
       this.initReportsPage();
+
     }
 
     if (
-      page === "alerts"
+      page === 'alerts'
     ) {
+
       this.initAlertsPage();
+
     }
 
   },
 
-  /* =======================================================
-     ACTIVE NAVIGATION
-     ======================================================= */
-
-  updateActiveNavigation(page) {
+  updateActiveNavigation(
+    page
+  ) {
 
     document
       .querySelectorAll(
-        "[data-page]"
+        '[data-page]'
       )
-      .forEach(element => {
+      .forEach(
+        element => {
 
-        element.classList.toggle(
-          "active",
-          element.dataset.page === page
-        );
+          element.classList.toggle(
+            'active',
+            element.dataset.page ===
+              page
+          );
 
-      });
+        }
+      );
 
   },
 
-  /* =======================================================
-     MOBILE NAVIGATION
-     ======================================================= */
+  /*
+  ============================================================
+  MOBILE
+  ============================================================
+  */
 
   setupMobileNavigation() {
 
-    const menuButton =
+    const button =
       document.querySelector(
-        "[data-mobile-menu]"
+        '[data-mobile-menu]'
       );
 
     const sidebar =
       document.querySelector(
-        "[data-sidebar]"
+        '[data-sidebar]'
       );
 
     const overlay =
       document.querySelector(
-        "[data-sidebar-overlay]"
+        '[data-sidebar-overlay]'
       );
 
     if (
-      !menuButton ||
+      !button ||
       !sidebar
     ) {
+
       return;
     }
 
-    menuButton.addEventListener(
-      "click",
+    button.addEventListener(
+      'click',
       () => {
 
         sidebar.classList.toggle(
-          "mobile-open"
+          'mobile-open'
         );
 
-        if (overlay) {
-
-          overlay.classList.toggle(
-            "visible"
-          );
-
-        }
+        overlay?.classList.toggle(
+          'visible'
+        );
 
         document.body.classList.toggle(
-          "menu-open"
+          'menu-open'
         );
 
       }
     );
 
-    if (overlay) {
+    overlay?.addEventListener(
+      'click',
+      () => {
 
-      overlay.addEventListener(
-        "click",
-        () => {
+        sidebar.classList.remove(
+          'mobile-open'
+        );
 
-          sidebar.classList.remove(
-            "mobile-open"
-          );
+        overlay.classList.remove(
+          'visible'
+        );
 
-          overlay.classList.remove(
-            "visible"
-          );
+        document.body.classList.remove(
+          'menu-open'
+        );
 
-          document.body.classList.remove(
-            "menu-open"
-          );
-
-        }
-      );
-
-    }
+      }
+    );
 
   },
 
-  /* =======================================================
-     GLOBAL BUTTONS
-     ======================================================= */
+  /*
+  ============================================================
+  GLOBAL BUTTONS
+  ============================================================
+  */
 
   setupGlobalButtons() {
 
     document.addEventListener(
-      "click",
+      'click',
       event => {
 
         const button =
           event.target.closest(
-            "[data-action]"
+            '[data-action]'
           );
 
         if (!button) return;
@@ -524,47 +849,49 @@ const CHESARA = {
 
         switch (action) {
 
-          case "refresh":
+          case 'refresh':
 
             this.loadDashboard();
 
             this.showToast(
-              "Ma’lumotlar yangilanmoqda..."
+              'Ma’lumotlar yangilanmoqda...'
             );
 
             break;
 
-          case "open-analysis":
+          case 'open-analysis':
 
             this.navigate(
-              "analysis"
+              'analysis'
             );
 
             break;
 
-          case "open-reports":
+          case 'open-reports':
 
             this.navigate(
-              "reports"
+              'reports'
             );
 
             break;
 
-          case "open-attendance":
+          case 'open-attendance':
 
             this.navigate(
-              "attendance"
+              'attendance'
             );
 
             break;
 
-          case "passport":
+          case 'open-passport':
 
-            this.openPassport();
+            this.navigate(
+              'passport'
+            );
 
             break;
 
-          case "logout":
+          case 'logout':
 
             this.logout();
 
@@ -573,7 +900,7 @@ const CHESARA = {
           default:
 
             console.warn(
-              "Noma’lum action:",
+              'Noma’lum action:',
               action
             );
 
@@ -584,80 +911,314 @@ const CHESARA = {
 
   },
 
-  /* =======================================================
-     AI ANALYSIS
-     ======================================================= */
+  /*
+  ============================================================
+  3 NUQTA — TAHRIRLASH / O‘CHIRISH / KO‘RISH
+  ============================================================
+  */
+
+  setupThreeDotActions() {
+
+    document.addEventListener(
+      'click',
+      event => {
+
+        const button =
+          event.target.closest(
+            '[data-more-action]'
+          );
+
+        if (!button) return;
+
+        event.stopPropagation();
+
+        const type =
+          button.dataset.moreAction;
+
+        const id =
+          button.dataset.id || '';
+
+        this.openActionMenu(
+          button,
+          type,
+          id
+        );
+
+      }
+    );
+
+    document.addEventListener(
+      'click',
+      event => {
+
+        if (
+          !event.target.closest(
+            '.chesara-action-menu'
+          ) &&
+          !event.target.closest(
+            '[data-more-action]'
+          )
+        ) {
+
+          this.closeActionMenus();
+
+        }
+
+      }
+    );
+
+  },
+
+  openActionMenu(
+    button,
+    type,
+    id
+  ) {
+
+    this.closeActionMenus();
+
+    const menu =
+      document.createElement(
+        'div'
+      );
+
+    menu.className =
+      'chesara-action-menu';
+
+    menu.innerHTML = `
+
+      <button
+        type="button"
+        data-menu-action="view"
+        data-id="${this.escape(id)}"
+      >
+        👁 Ko‘rish
+      </button>
+
+      <button
+        type="button"
+        data-menu-action="edit"
+        data-id="${this.escape(id)}"
+      >
+        ✏️ Tahrirlash
+      </button>
+
+      <button
+        type="button"
+        data-menu-action="delete"
+        data-id="${this.escape(id)}"
+      >
+        🗑 O‘chirish
+      </button>
+
+    `;
+
+    document.body.appendChild(
+      menu
+    );
+
+    const rect =
+      button.getBoundingClientRect();
+
+    menu.style.position =
+      'fixed';
+
+    menu.style.top =
+      `${rect.bottom + 6}px`;
+
+    menu.style.left =
+      `${Math.max(
+        8,
+        rect.right - 190
+      )}px`;
+
+    menu.addEventListener(
+      'click',
+      event => {
+
+        const item =
+          event.target.closest(
+            '[data-menu-action]'
+          );
+
+        if (!item) return;
+
+        this.handleMenuAction(
+          item.dataset.menuAction,
+          item.dataset.id,
+          type
+        );
+
+        this.closeActionMenus();
+
+      }
+    );
+
+  },
+
+  closeActionMenus() {
+
+    document
+      .querySelectorAll(
+        '.chesara-action-menu'
+      )
+      .forEach(
+        menu => menu.remove()
+      );
+
+  },
+
+  async handleMenuAction(
+    action,
+    id,
+    type
+  ) {
+
+    if (
+      action === 'view'
+    ) {
+
+      this.showToast(
+        `Ma’lumot ko‘rish: ${id || type}`
+      );
+
+      return;
+    }
+
+    if (
+      action === 'edit'
+    ) {
+
+      this.showToast(
+        `Tahrirlash: ${id || type}`
+      );
+
+      return;
+    }
+
+    if (
+      action === 'delete'
+    ) {
+
+      const confirmed =
+        window.confirm(
+          'Bu ma’lumotni o‘chirishni xohlaysizmi?'
+        );
+
+      if (!confirmed) return;
+
+      const result =
+        await this.api(
+          `/api/${type}/${encodeURIComponent(id)}`,
+          {
+            method: 'DELETE'
+          }
+        );
+
+      if (
+        result
+      ) {
+
+        this.showToast(
+          'Ma’lumot o‘chirildi.'
+        );
+
+        await this.loadDashboard();
+
+      }
+
+    }
+
+  },
+
+  /*
+  ============================================================
+  AI ANALYSIS
+  ============================================================
+  */
 
   initAnalysisPage() {
 
     const form =
       document.querySelector(
-        "[data-analysis-form]"
+        '[data-analysis-form]'
       );
 
     if (
       !form ||
       form.dataset.ready
     ) {
+
       return;
     }
 
     form.dataset.ready =
-      "true";
+      'true';
 
     form.addEventListener(
-      "submit",
+      'submit',
       async event => {
 
         event.preventDefault();
 
         const source =
           form.querySelector(
-            "[name='source']"
+            '[name="source"]'
           )?.value ||
-          "manual";
+          'manual';
 
         const game =
           form.querySelector(
-            "[name='game']"
+            '[name="game"]'
           )?.value ||
-          "";
+          '';
 
         const player =
           form.querySelector(
-            "[name='player']"
+            '[name="player"]'
           )?.value ||
-          "O‘yinchi";
+          'O‘yinchi';
 
-        if (!game.trim()) {
+        if (
+          !game.trim()
+        ) {
 
           this.showToast(
-            "Avval PGN yoki o‘yin ma’lumotlarini kiriting.",
-            "error"
+            'Avval PGN yoki o‘yin ma’lumotini kiriting.',
+            'error'
           );
 
           return;
         }
 
         this.showToast(
-          "O‘yin CHESARA AI tahliliga yuborilmoqda..."
+          'O‘yin CHESARA AI tahliliga yuborilmoqda...'
         );
 
         const result =
           await this.api(
-            "/api/chess/analyze",
+            '/api/chess/analyze',
             {
-              method: "POST",
+              method: 'POST',
 
-              body: JSON.stringify({
-                source,
-                game,
-                player
-              })
+              body:
+                JSON.stringify({
+                  source,
+                  game,
+                  player
+                })
             }
           );
 
-        if (!result) return;
+        if (!result) {
+
+          this.showToast(
+            'AI tahlil serveri javob bermadi.',
+            'error'
+          );
+
+          return;
+        }
 
         this.renderAnalysisResult(
           result
@@ -668,11 +1229,13 @@ const CHESARA = {
 
   },
 
-  renderAnalysisResult(result) {
+  renderAnalysisResult(
+    result
+  ) {
 
     const container =
       document.querySelector(
-        "[data-analysis-result]"
+        '[data-analysis-result]'
       );
 
     if (!container) return;
@@ -686,7 +1249,6 @@ const CHESARA = {
           <span class="status-dot"></span>
 
           <div>
-
             <strong>
               O‘yin qabul qilindi
             </strong>
@@ -694,7 +1256,6 @@ const CHESARA = {
             <small>
               CHESARA AI Intelligence
             </small>
-
           </div>
 
         </div>
@@ -706,7 +1267,7 @@ const CHESARA = {
             <strong>
               ${
                 result.analysis?.accuracy ??
-                "—"
+                '—'
               }
             </strong>
           </div>
@@ -736,7 +1297,7 @@ const CHESARA = {
             <strong>
               ${
                 result.opening?.name ??
-                "—"
+                '—'
               }
             </strong>
           </div>
@@ -745,83 +1306,93 @@ const CHESARA = {
 
         <div class="analysis-message">
           ${
-            result.message ||
-            ""
+            this.escape(
+              result.message || ''
+            )
           }
         </div>
 
       </div>
+
     `;
 
   },
 
-  /* =======================================================
-     ATTENDANCE
-     ======================================================= */
+  /*
+  ============================================================
+  ATTENDANCE
+  ============================================================
+  */
 
   initAttendancePage() {
 
     document
       .querySelectorAll(
-        "[data-attendance-action]"
+        '[data-attendance-action]'
       )
-      .forEach(button => {
+      .forEach(
+        button => {
 
-        if (
-          button.dataset.ready
-        ) {
-          return;
-        }
+          if (
+            button.dataset.ready
+          ) {
 
-        button.dataset.ready =
-          "true";
-
-        button.addEventListener(
-          "click",
-          () => {
-
-            const action =
-              button.dataset
-                .attendanceAction;
-
-            this.showToast(
-              `Davomat amali: ${action}`
-            );
-
+            return;
           }
-        );
 
-      });
+          button.dataset.ready =
+            'true';
+
+          button.addEventListener(
+            'click',
+            () => {
+
+              const action =
+                button.dataset
+                  .attendanceAction;
+
+              this.showToast(
+                `Davomat: ${action}`
+              );
+
+            }
+          );
+
+        }
+      );
 
   },
 
-  /* =======================================================
-     REPORTS
-     ======================================================= */
+  /*
+  ============================================================
+  REPORTS
+  ============================================================
+  */
 
   initReportsPage() {
 
     const button =
       document.querySelector(
-        "[data-generate-report]"
+        '[data-generate-report]'
       );
 
     if (
       !button ||
       button.dataset.ready
     ) {
+
       return;
     }
 
     button.dataset.ready =
-      "true";
+      'true';
 
     button.addEventListener(
-      "click",
+      'click',
       () => {
 
         this.showToast(
-          "Hisobot shakllantirish moduli ishga tushirildi."
+          'Hisobot tayyorlanmoqda...'
         );
 
       }
@@ -829,1035 +1400,336 @@ const CHESARA = {
 
   },
 
-  /* =======================================================
-     ALERTS
-     ======================================================= */
+  /*
+  ============================================================
+  ALERTS
+  ============================================================
+  */
 
   initAlertsPage() {
 
-    const alerts =
-      document.querySelectorAll(
-        "[data-alert]"
-      );
-
-    alerts.forEach(alert => {
-
-      if (
-        alert.dataset.ready
-      ) {
-        return;
-      }
-
-      alert.dataset.ready =
-        "true";
-
-      alert.addEventListener(
-        "click",
-        () => {
-
-          alert.classList.toggle(
-            "read"
-          );
-
-        }
-      );
-
-    });
-
-  },
-
-  /* =======================================================
-     CHESARA PASSPORT
-     ======================================================= */
-
-  setupPassportButtons() {
-
-    document.addEventListener(
-      "click",
-      event => {
-
-        const button =
-          event.target.closest(
-            "[data-chesara-action='passport']"
-          );
-
-        if (!button) return;
-
-        event.preventDefault();
-
-        this.openPassport();
-
-      }
-    );
-
-  },
-
-  openPassport(id = "") {
-
-    const modal =
-      document.createElement(
-        "div"
-      );
-
-    modal.className =
-      "chesara-modal-overlay";
-
-    modal.innerHTML = `
-
-      <div class="chesara-modal">
-
-        <div class="chesara-modal-header">
-
-          <div>
-
-            <div class="chesara-modal-title">
-              🪪 CHESARA PASSPORT
-            </div>
-
-            <div class="chesara-modal-subtitle">
-              CHESARA ID orqali shaxsni tekshirish
-            </div>
-
-          </div>
-
-          <button
-            type="button"
-            class="chesara-close"
-            data-close
-          >
-            ×
-          </button>
-
-        </div>
-
-        <div class="chesara-modal-body">
-
-          <div class="chesara-form-group">
-
-            <label>
-              CHESARA ID
-            </label>
-
-            <input
-              id="chesaraPassportId"
-              type="text"
-              placeholder="CH-000001"
-              value="${this.escapeAttribute(id)}"
-            >
-
-          </div>
-
-          <button
-            type="button"
-            class="chesara-primary-button"
-            id="chesaraPassportSearch"
-          >
-            🔎 Tekshirish
-          </button>
-
-          <div
-            id="chesaraPassportResult"
-            style="margin-top:20px"
-          ></div>
-
-        </div>
-
-      </div>
-    `;
-
-    document.body.appendChild(
-      modal
-    );
-
-    modal
+    document
       .querySelectorAll(
-        "[data-close]"
+        '[data-alert]'
       )
-      .forEach(button => {
+      .forEach(
+        alert => {
 
-        button.addEventListener(
-          "click",
-          () => modal.remove()
-        );
+          if (
+            alert.dataset.ready
+          ) return;
 
-      });
+          alert.dataset.ready =
+            'true';
 
-    modal
-      .querySelector(
-        "#chesaraPassportSearch"
-      )
-      ?.addEventListener(
-        "click",
-        async () => {
+          alert.addEventListener(
+            'click',
+            () => {
 
-          const input =
-            modal.querySelector(
-              "#chesaraPassportId"
-            );
+              alert.classList.toggle(
+                'read'
+              );
 
-          const value =
-            input?.value?.trim();
-
-          if (!value) {
-
-            this.showToast(
-              "CHESARA ID kiriting.",
-              "error"
-            );
-
-            return;
-          }
-
-          await this.searchPassport(
-            value,
-            modal.querySelector(
-              "#chesaraPassportResult"
-            )
-          );
-
-        }
-      );
-
-  },
-
-  async searchPassport(
-    id,
-    container
-  ) {
-
-    if (!container) return;
-
-    container.innerHTML = `
-      <div class="chesara-loading">
-        Tekshirilmoqda...
-      </div>
-    `;
-
-    /*
-      Backenddagi Passport endpoint
-      mavjud bo‘lsa shu yer orqali olinadi.
-    */
-
-    const endpoints = [
-      `/api/passport/${encodeURIComponent(id)}`,
-      `/api/passports/${encodeURIComponent(id)}`,
-      `/api/users/passport/${encodeURIComponent(id)}`
-    ];
-
-    let result = null;
-
-    for (
-      const endpoint of endpoints
-    ) {
-
-      try {
-
-        const response =
-          await fetch(
-            endpoint,
-            {
-              headers: {
-                "Content-Type":
-                  "application/json"
-              }
             }
           );
 
-        if (
-          response.ok
-        ) {
-
-          result =
-            await response.json();
-
-          break;
-
         }
+      );
 
-      } catch (error) {
+  },
 
-        console.warn(
-          "Passport endpoint:",
-          endpoint,
-          error.message
+  /*
+  ============================================================
+  USER INTERFACE
+  ============================================================
+  */
+
+  updateUserInterface() {
+
+    const user =
+      this.state.user;
+
+    const name =
+      user.name ||
+      'Foydalanuvchi';
+
+    const role =
+      this.getRoleName(
+        user.role
+      );
+
+    document
+      .querySelectorAll(
+        '[data-user-name]'
+      )
+      .forEach(
+        element => {
+          element.textContent =
+            name;
+        }
+      );
+
+    document
+      .querySelectorAll(
+        '[data-user-role]'
+      )
+      .forEach(
+        element => {
+          element.textContent =
+            role;
+        }
+      );
+
+    document
+      .querySelectorAll(
+        '[data-user-telegram]'
+      )
+      .forEach(
+        element => {
+          element.textContent =
+            user.telegramId ||
+            user.id ||
+            '—';
+        }
+      );
+
+    const initials =
+      name
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(
+          x =>
+            x.charAt(0)
+              .toUpperCase()
+        )
+        .join('') ||
+      'CH';
+
+    document
+      .querySelectorAll(
+        '[data-user-initials]'
+      )
+      .forEach(
+        element => {
+          element.textContent =
+            initials;
+        }
+      );
+
+    /*
+    STATIK ESKI ADMIN MATNLARINI
+    SUPER ADMIN BO‘LMAGANDA O‘ZGARTIRAMIZ
+    */
+
+    if (
+      !user.isSuperAdmin
+    ) {
+
+      document
+        .querySelectorAll(
+          '.profile-info strong'
+        )
+        .forEach(
+          element => {
+            element.textContent =
+              name;
+          }
         );
 
-      }
+      document
+        .querySelectorAll(
+          '.profile-info span'
+        )
+        .forEach(
+          element => {
+            element.textContent =
+              role;
+          }
+        );
+
+    } else {
+
+      document
+        .querySelectorAll(
+          '.profile-info strong'
+        )
+        .forEach(
+          element => {
+            element.textContent =
+              name;
+          }
+        );
+
+      document
+        .querySelectorAll(
+          '.profile-info span'
+        )
+        .forEach(
+          element => {
+            element.textContent =
+              'Super Admin';
+          }
+        );
 
     }
 
-    if (!result) {
+    /*
+    SUPER ADMINGA QO‘SHIMCHA MENYULAR
+    */
 
-      container.innerHTML = `
+    if (
+      user.isSuperAdmin
+    ) {
 
-        <div class="chesara-empty">
+      this.enableSuperAdminUI();
 
-          <div style="font-size:42px">
-            🪪
-          </div>
+    }
 
-          <strong>
-            CHESARA ID topilmadi
-          </strong>
+  },
 
-          <p>
-            Kiritilgan ID bo‘yicha
-            tasdiqlangan ma’lumot mavjud emas.
-          </p>
+  enableSuperAdminUI() {
 
-        </div>
+    const nav =
+      document.querySelector(
+        '.sidebar-nav'
+      );
 
-      `;
+    if (!nav) return;
+
+    if (
+      document.querySelector(
+        '[data-page="centers"]'
+      )
+    ) {
 
       return;
     }
 
-    this.renderPassport(
-      result,
-      container
-    );
-
-  },
-
-  renderPassport(
-    data,
-    container
-  ) {
-
-    const passport =
-      data.passport ||
-      data.user ||
-      data;
-
-    const name =
-      passport.fullName ||
-      passport.name ||
-      [
-        passport.firstName,
-        passport.lastName
-      ]
-        .filter(Boolean)
-        .join(" ") ||
-      "Noma’lum";
-
-    const id =
-      passport.chesaraId ||
-      passport.chesaraID ||
-      passport.id ||
-      "—";
-
-    const role =
-      passport.role ||
-      passport.status ||
-      "—";
-
-    const photo =
-      passport.photo ||
-      passport.photoUrl ||
-      passport.image ||
-      "";
-
-    const certificateList =
-      Array.isArray(
-        passport.certificates
-      )
-        ? passport.certificates
-        : [];
-
-    container.innerHTML = `
-
-      <div class="chesara-passport">
-
-        <div class="passport-top">
-
-          <div class="passport-logo">
-            ♟
-          </div>
-
-          <div>
-
-            <strong>
-              CHESARA
-            </strong>
-
-            <small>
-              SHAXMAT PASPORTI
-            </small>
-
-          </div>
-
-          <span class="passport-verified">
-            ✓ TASDIQLANGAN
-          </span>
-
-        </div>
-
-        <div class="passport-content">
-
-          <div class="passport-person">
-
-            <div class="passport-photo">
-
-              ${
-                photo
-                  ? `
-                    <img
-                      src="${this.escapeAttribute(photo)}"
-                      alt="CHESARA Passport"
-                    >
-                  `
-                  : `
-                    <div class="passport-no-photo">
-                      ♟
-                    </div>
-                  `
-              }
-
-            </div>
-
-            <div class="passport-person-info">
-
-              <div class="passport-id-label">
-                CHESARA ID
-              </div>
-
-              <div class="passport-id-value">
-                ${this.escapeHtml(id)}
-              </div>
-
-              <h3>
-                ${this.escapeHtml(name)}
-              </h3>
-
-              <span class="passport-role">
-                ${this.escapeHtml(role)}
-              </span>
-
-            </div>
-
-          </div>
-
-          <div class="passport-details">
-
-            ${this.passportField(
-              "Tug‘ilgan sana",
-              passport.birthDate
-            )}
-
-            ${this.passportField(
-              "Telefon",
-              passport.phone
-            )}
-
-            ${this.passportField(
-              "Hudud",
-              passport.region
-            )}
-
-            ${this.passportField(
-              "Faoliyat",
-              passport.activityType
-            )}
-
-            ${this.passportField(
-              "CHESARA status",
-              passport.chesaraStatus ||
-              passport.status
-            )}
-
-            ${this.passportField(
-              "Ustozlik statusi",
-              passport.teacherStatus
-            )}
-
-          </div>
-
-          ${
-            certificateList.length
-              ? `
-
-                <div class="passport-certificates">
-
-                  <h4>
-                    🎓 Sertifikatlar
-                  </h4>
-
-                  ${certificateList
-                    .map(
-                      certificate => `
-
-                        <div class="passport-certificate">
-
-                          <strong>
-                            ${this.escapeHtml(
-                              certificate.name ||
-                              certificate.title ||
-                              "CHESARA sertifikati"
-                            )}
-                          </strong>
-
-                          ${
-                            certificate.number
-                              ? `
-                                <span>
-                                  № ${this.escapeHtml(
-                                    certificate.number
-                                  )}
-                                </span>
-                              `
-                              : ""
-                          }
-
-                        </div>
-
-                      `
-                    )
-                    .join("")}
-
-                </div>
-
-              `
-              : ""
-          }
-
-        </div>
-
-      </div>
-    `;
-
-  },
-
-  passportField(
-    label,
-    value
-  ) {
-
-    return `
-
-      <div class="passport-field">
-
-        <span>
-          ${this.escapeHtml(label)}
-        </span>
-
-        <strong>
-          ${this.escapeHtml(
-            value || "—"
-          )}
-        </strong>
-
-      </div>
-
-    `;
-
-  },
-
-  /* =======================================================
-     CHESARA ID SEARCH
-     ======================================================= */
-
-  async searchChesaraId(id) {
-
-    const value =
-      String(id || "")
-        .trim();
-
-    if (!value) {
-
-      this.showToast(
-        "CHESARA ID kiriting.",
-        "error"
-      );
-
-      return null;
-    }
-
-    const endpoints = [
-      `/api/passport/${encodeURIComponent(value)}`,
-      `/api/passports/${encodeURIComponent(value)}`,
-      `/api/users/passport/${encodeURIComponent(value)}`
-    ];
-
-    for (
-      const endpoint of endpoints
-    ) {
-
-      const result =
-        await this.api(
-          endpoint
-        );
-
-      if (result) {
-        return result;
-      }
-
-    }
-
-    return null;
-
-  },
-
-  /* =======================================================
-     3 DOT MENU
-     ======================================================= */
-
-  setupMoreMenus() {
-
-    document.addEventListener(
-      "click",
-      event => {
-
-        const button =
-          event.target.closest(
-            "[data-more-menu]"
-          );
-
-        if (!button) {
-
-          document
-            .querySelectorAll(
-              ".chesara-more-dropdown"
-            )
-            .forEach(menu => {
-
-              menu.classList.add(
-                "hidden"
-              );
-
-            });
-
-          return;
-        }
-
-        event.stopPropagation();
-
-        const menu =
-          button
-            .parentElement
-            ?.querySelector(
-              ".chesara-more-dropdown"
-            );
-
-        if (!menu) return;
-
-        document
-          .querySelectorAll(
-            ".chesara-more-dropdown"
-          )
-          .forEach(item => {
-
-            if (
-              item !== menu
-            ) {
-
-              item.classList.add(
-                "hidden"
-              );
-
-            }
-
-          });
-
-        menu.classList.toggle(
-          "hidden"
-        );
-
-      }
-    );
-
-  },
-
-  createMoreMenu(
-    options = {}
-  ) {
-
-    const wrapper =
+    const section =
       document.createElement(
-        "div"
+        'div'
       );
 
-    wrapper.className =
-      "chesara-more-wrapper";
+    section.className =
+      'nav-section chesara-admin-section';
 
-    wrapper.innerHTML = `
+    section.innerHTML = `
 
-      <button
-        type="button"
-        class="chesara-more-button"
-        data-more-menu
-        title="Qo‘shimcha amallar"
-      >
-        ⋮
-      </button>
-
-      <div
-        class="chesara-more-dropdown hidden"
-      >
-
-        ${
-          options.view !== false
-            ? `
-              <button
-                type="button"
-                data-more-action="view"
-              >
-                👁 Ko‘rish
-              </button>
-            `
-            : ""
-        }
-
-        ${
-          options.edit !== false
-            ? `
-              <button
-                type="button"
-                data-more-action="edit"
-              >
-                ✏️ Tahrirlash
-              </button>
-            `
-            : ""
-        }
-
-        ${
-          options.delete !== false
-            ? `
-              <button
-                type="button"
-                class="danger"
-                data-more-action="delete"
-              >
-                🗑 O‘chirish
-              </button>
-            `
-            : ""
-        }
-
+      <div class="nav-label">
+        SUPER ADMIN
       </div>
+
+      <a
+        href="?page=centers"
+        class="nav-item"
+        data-page="centers"
+      >
+        <span class="nav-icon">🏢</span>
+        <span>Markazlar</span>
+      </a>
+
+      <a
+        href="?page=courses"
+        class="nav-item"
+        data-page="courses"
+      >
+        <span class="nav-icon">📚</span>
+        <span>Kurslar</span>
+      </a>
+
+      <a
+        href="?page=passport"
+        class="nav-item"
+        data-page="passport"
+      >
+        <span class="nav-icon">🪪</span>
+        <span>CHESARA Pasporti</span>
+      </a>
+
     `;
 
-    wrapper
-      .querySelectorAll(
-        "[data-more-action]"
-      )
-      .forEach(button => {
-
-        button.addEventListener(
-          "click",
-          async event => {
-
-            event.stopPropagation();
-
-            const action =
-              button.dataset.moreAction;
-
-            wrapper
-              .querySelector(
-                ".chesara-more-dropdown"
-              )
-              ?.classList.add(
-                "hidden"
-              );
-
-            if (
-              typeof options[action] ===
-              "function"
-            ) {
-
-              await options[action]();
-
-            }
-
-          }
-        );
-
-      });
-
-    return wrapper;
-
-  },
-
-  /* =======================================================
-     EDIT MODAL
-     ======================================================= */
-
-  openEditModal(
-    title,
-    fields = {},
-    onSave
-  ) {
-
-    const modal =
-      document.createElement(
-        "div"
-      );
-
-    modal.className =
-      "chesara-modal-overlay";
-
-    const fieldsHtml =
-      Object.entries(fields)
-        .map(
-          ([key, value]) => `
-
-            <div class="chesara-form-group">
-
-              <label>
-                ${this.escapeHtml(key)}
-              </label>
-
-              <input
-                type="text"
-                data-edit-field="${this.escapeAttribute(key)}"
-                value="${this.escapeAttribute(
-                  value ?? ""
-                )}"
-              >
-
-            </div>
-
-          `
-        )
-        .join("");
-
-    modal.innerHTML = `
-
-      <div class="chesara-modal">
-
-        <div class="chesara-modal-header">
-
-          <div class="chesara-modal-title">
-            ✏️ ${this.escapeHtml(title)}
-          </div>
-
-          <button
-            type="button"
-            class="chesara-close"
-            data-close
-          >
-            ×
-          </button>
-
-        </div>
-
-        <div class="chesara-modal-body">
-
-          ${fieldsHtml}
-
-        </div>
-
-        <div class="chesara-modal-footer">
-
-          <button
-            type="button"
-            class="chesara-secondary-button"
-            data-close
-          >
-            Bekor qilish
-          </button>
-
-          <button
-            type="button"
-            class="chesara-primary-button"
-            data-save
-          >
-            💾 Saqlash
-          </button>
-
-        </div>
-
-      </div>
-    `;
-
-    document.body.appendChild(
-      modal
-    );
-
-    modal
-      .querySelectorAll(
-        "[data-close]"
-      )
-      .forEach(button => {
-
-        button.addEventListener(
-          "click",
-          () => modal.remove()
-        );
-
-      });
-
-    modal
-      .querySelector(
-        "[data-save]"
-      )
-      ?.addEventListener(
-        "click",
-        async () => {
-
-          const result = {};
-
-          modal
-            .querySelectorAll(
-              "[data-edit-field]"
-            )
-            .forEach(input => {
-
-              result[
-                input.dataset.editField
-              ] = input.value;
-
-            });
-
-          if (
-            typeof onSave ===
-            "function"
-          ) {
-
-            await onSave(result);
-
-          }
-
-          modal.remove();
-
-        }
-      );
-
-  },
-
-  /* =======================================================
-     DELETE CONFIRM
-     ======================================================= */
-
-  async confirmDelete(
-    title =
-      "O‘chirish",
-    message =
-      "Haqiqatan ham o‘chirmoqchimisiz?"
-  ) {
-
-    return new Promise(
-      resolve => {
-
-        const modal =
-          document.createElement(
-            "div"
-          );
-
-        modal.className =
-          "chesara-modal-overlay";
-
-        modal.innerHTML = `
-
-          <div
-            class="chesara-modal"
-            style="max-width:420px"
-          >
-
-            <div class="chesara-modal-header">
-
-              <div class="chesara-modal-title">
-                🗑 ${this.escapeHtml(title)}
-              </div>
-
-            </div>
-
-            <div class="chesara-modal-body">
-
-              <div class="chesara-danger-box">
-                ${this.escapeHtml(message)}
-              </div>
-
-            </div>
-
-            <div class="chesara-modal-footer">
-
-              <button
-                type="button"
-                class="chesara-secondary-button"
-                data-no
-              >
-                Bekor qilish
-              </button>
-
-              <button
-                type="button"
-                class="chesara-danger-button"
-                data-yes
-              >
-                🗑 O‘chirish
-              </button>
-
-            </div>
-
-          </div>
-        `;
-
-        document.body.appendChild(
-          modal
-        );
-
-        modal
-          .querySelector(
-            "[data-no]"
-          )
-          .addEventListener(
-            "click",
-            () => {
-
-              modal.remove();
-
-              resolve(false);
-
-            }
-          );
-
-        modal
-          .querySelector(
-            "[data-yes]"
-          )
-          .addEventListener(
-            "click",
-            () => {
-
-              modal.remove();
-
-              resolve(true);
-
-            }
-          );
-
-      }
+    nav.appendChild(
+      section
     );
 
   },
 
-  /* =======================================================
-     LOGOUT
-     ======================================================= */
+  /*
+  ============================================================
+  ROLE
+  ============================================================
+  */
+
+  getRoleName(role) {
+
+    const roles = {
+
+      super_admin:
+        'Super Admin',
+
+      director:
+        'Direktor',
+
+      controller:
+        'Nazoratchi',
+
+      teacher:
+        'Ustoz',
+
+      student:
+        'O‘quvchi',
+
+      parent:
+        'Ota-ona'
+
+    };
+
+    return (
+      roles[role] ||
+      'Foydalanuvchi'
+    );
+
+  },
+
+  /*
+  ============================================================
+  LOGOUT
+  ============================================================
+  */
 
   logout() {
 
     localStorage.removeItem(
-      "chesara_session"
+      'chesara_session'
     );
 
-    this.showToast(
-      "Sessiya yakunlandi."
+    localStorage.removeItem(
+      'chesara_user'
     );
 
-    setTimeout(
-      () => {
-        window.location.reload();
-      },
-      700
-    );
+    if (
+      this.telegram
+    ) {
+
+      try {
+
+        this.telegram.close();
+
+      } catch {}
+
+    }
+
+    window.location.href =
+      '/';
 
   },
 
-  /* =======================================================
-     HELPERS
-     ======================================================= */
+  /*
+  ============================================================
+  HELPERS
+  ============================================================
+  */
 
   setText(
     selector,
@@ -1872,67 +1744,59 @@ const CHESARA = {
     if (element) {
 
       element.textContent =
-        value;
+        value ?? '';
 
     }
 
   },
 
-  escapeHtml(value) {
+  escape(value) {
 
     return String(
-      value ?? ""
+      value ?? ''
     )
-      .replaceAll(
-        "&",
-        "&amp;"
+      .replace(
+        /&/g,
+        '&amp;'
       )
-      .replaceAll(
-        "<",
-        "&lt;"
+      .replace(
+        /</g,
+        '&lt;'
       )
-      .replaceAll(
-        ">",
-        "&gt;"
+      .replace(
+        />/g,
+        '&gt;'
       )
-      .replaceAll(
-        '"',
-        "&quot;"
+      .replace(
+        /"/g,
+        '&quot;'
       )
-      .replaceAll(
-        "'",
-        "&#039;"
+      .replace(
+        /'/g,
+        '&#039;'
       );
-
-  },
-
-  escapeAttribute(value) {
-
-    return this.escapeHtml(
-      value
-    );
 
   },
 
   showToast(
     message,
-    type = "success"
+    type = 'success'
   ) {
 
     let container =
       document.querySelector(
-        ".chesara-toast-container"
+        '.chesara-toast-container'
       );
 
     if (!container) {
 
       container =
         document.createElement(
-          "div"
+          'div'
         );
 
       container.className =
-        "chesara-toast-container";
+        'chesara-toast-container';
 
       document.body.appendChild(
         container
@@ -1942,7 +1806,7 @@ const CHESARA = {
 
     const toast =
       document.createElement(
-        "div"
+        'div'
       );
 
     toast.className =
@@ -1959,7 +1823,7 @@ const CHESARA = {
       () => {
 
         toast.classList.add(
-          "hide"
+          'hide'
         );
 
         setTimeout(
@@ -1978,15 +1842,27 @@ const CHESARA = {
 };
 
 
-/* =========================================================
-   START
-   ========================================================= */
+/*
+============================================================
+ START
+============================================================
+*/
 
 document.addEventListener(
-  "DOMContentLoaded",
+  'DOMContentLoaded',
   () => {
 
     CHESARA.init();
 
   }
 );
+
+
+/*
+============================================================
+ GLOBAL ACCESS
+============================================================
+*/
+
+window.CHESARA =
+  CHESARA;
