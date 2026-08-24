@@ -1,3362 +1,1492 @@
 'use strict';
 
-const express = require('express');
-const path = require('path');
-const crypto = require('crypto');
-const cors = require('cors');
+const TelegramBot = require('node-telegram-bot-api');
 
-const {
-  startScheduler,
-  getLessons,
-  getLesson,
-  addLesson,
-  markAttendance,
-  finishLesson
-} = require('./scheduler');
+const token = process.env.TELEGRAM_BOT_TOKEN;
 
-const {
-  isSubscribed
-} = require('./subscription');
+if (!token) {
+  console.error('❌ TELEGRAM_BOT_TOKEN topilmadi!');
+  module.exports = null;
+  return;
+}
 
-const {
-  SUPER_ADMIN,
-  getOrCreateUser,
-  getUser,
-  isSuperAdmin,
-  setRole,
-  getRole,
-  canChangeRole,
-  getRoleChangeMessage,
-  getNextRoleChangeDate,
-  getPermissions,
-  hasPermission,
-  createCenter,
-  getCenters,
-  getCenter,
-  requestCenterJoin,
-  approveCenterJoin,
-  setIndependentTeacher,
-  setCenterTeacher,
-  getAllUsers
-} = require('./access');
+const bot = new TelegramBot(token, {
+  polling: false
+});
 
-const app = express();
+console.log('🤖 CHESARA Telegram bot moduli ishga tushdi.');
 
-const PORT =
-  Number(process.env.PORT) || 10000;
+/* =========================================================
+   SUPER ADMIN
+========================================================= */
 
-const BOT_TOKEN =
-  process.env.TELEGRAM_BOT_TOKEN;
-
-const PUBLIC_URL = (
-  process.env.RENDER_EXTERNAL_URL ||
-  process.env.PUBLIC_URL ||
-  'https://chesara.onrender.com'
-).replace(/\/$/, '');
-
-const WEBHOOK_SECRET =
-  process.env.TELEGRAM_WEBHOOK_SECRET ||
-  (
-    BOT_TOKEN
-      ? crypto
-          .createHash('sha256')
-          .update(BOT_TOKEN)
-          .digest('hex')
-          .slice(0, 32)
-      : 'chesara-webhook'
-  );
-
-const WEBHOOK_PATH =
-  `/telegram/webhook/${WEBHOOK_SECRET}`;
-
-const WEBHOOK_URL =
-  `${PUBLIC_URL}${WEBHOOK_PATH}`;
-
-let bot = null;
-let telegramReady = false;
-
-/*
-============================================================
-ROLLAR
-============================================================
-*/
-
-const ROLES = {
-  PARENT: 'parent',
-  STUDENT: 'student',
-  TEACHER: 'teacher',
-  SUPER_ADMIN: 'super_admin'
+const SUPER_ADMIN = {
+  telegramId: 1148401454,
+  username: 'jovliyev_bekzod'
 };
 
-/*
-============================================================
-MIDDLEWARE
-============================================================
-*/
+/* =========================================================
+   SUPER ADMINNI TEKSHIRISH
+========================================================= */
 
-app.use(cors());
+function isSuperAdmin(user) {
+  if (!user) return false;
 
-app.use(
-  express.json({
-    limit: '2mb'
-  })
-);
+  const id = Number(user.id || user.telegramId);
 
-app.use(
-  express.urlencoded({
-    extended: true
-  })
-);
-
-/*
-============================================================
-STATIK FAYLLAR
-============================================================
-*/
-
-app.use(
-  express.static(__dirname, {
-    index: false,
-    dotfiles: 'ignore'
-  })
-);
-
-app.use(
-  express.static(
-    path.join(__dirname, 'public'),
-    {
-      index: false,
-      dotfiles: 'ignore'
-    }
+  const username = String(
+    user.username || ''
   )
-);
+    .replace('@', '')
+    .toLowerCase();
 
-/*
-============================================================
- YORDAMCHI FUNKSIYALAR
-============================================================
-*/
-
-function getTelegramUserFromMessage(message) {
-  return {
-    id: message?.from?.id,
-    username: message?.from?.username,
-    first_name:
-      message?.from?.first_name,
-    last_name:
-      message?.from?.last_name
-  };
+  return (
+    id === SUPER_ADMIN.telegramId ||
+    username === SUPER_ADMIN.username.toLowerCase()
+  );
 }
 
-function ensureUser(fromUser) {
-  if (!fromUser?.id) {
-    return null;
+/* =========================================================
+   FOYDALANUVCHI HOLATI
+========================================================= */
+
+const userState = new Map();
+
+function setUserState(userId, state) {
+  userState.set(String(userId), state);
+}
+
+function getUserState(userId) {
+  return userState.get(String(userId)) || null;
+}
+
+function clearUserState(userId) {
+  userState.delete(String(userId));
+}
+
+/* =========================================================
+   ASOSIY MENYU
+========================================================= */
+
+const mainMenu = {
+  reply_markup: {
+    keyboard: [
+      ['👨‍🏫 Ustoz kabineti'],
+      ['👨‍🎓 O‘quvchi kabineti'],
+      ['📅 Davomat', '📊 Hisobotlar'],
+      ['🧠 O‘yin tahlili', '🏆 Turnirlar'],
+      ['📰 Yangiliklar', '🔔 Ogohlantirishlar'],
+      ['🪪 CHESARA Pasport'],
+      ['🔎 ID orqali tekshirish'],
+      ['⚙️ Profil'],
+      ['🔄 Rolni o‘zgartirish']
+    ],
+    resize_keyboard: true,
+    is_persistent: true
   }
+};
 
-  return getOrCreateUser({
-    telegramId: fromUser.id,
-    username: fromUser.username,
-    firstName: fromUser.first_name,
-    lastName: fromUser.last_name
-  });
-}
+/* =========================================================
+   SUPER ADMIN MENYU
+========================================================= */
 
-function userIsSuperAdmin(fromUser) {
-  return isSuperAdmin({
-    id: fromUser?.id,
-    username: fromUser?.username
-  });
-}
+const superAdminMenu = {
+  reply_markup: {
+    keyboard: [
+      ['👑 Super Admin'],
+      ['👥 Foydalanuvchilar'],
+      ['🪪 CHESARA Pasportlar'],
+      ['🏢 Markazlar'],
+      ['📚 Kurslar'],
+      ['📋 Guruhlar'],
+      ['📅 Darslar'],
+      ['👨‍🏫 Ustozlar'],
+      ['👨‍💼 Direktorlar'],
+      ['🛡 Nazoratchilar'],
+      ['🧩 Menyular'],
+      ['✏️ Matnlar'],
+      ['📢 Kanal / Obuna'],
+      ['⚙️ Tizim sozlamalari'],
+      ['🏠 Bosh menyu']
+    ],
+    resize_keyboard: true,
+    is_persistent: true
+  }
+};
 
-/*
-============================================================
- TELEGRAM MENULARI
-============================================================
-*/
+/* =========================================================
+   USTOZ MENYU
+========================================================= */
 
-function subscriptionKeyboard() {
-  return {
+const teacherMenu = {
+  reply_markup: {
+    keyboard: [
+      ['👨‍🎓 O‘quvchilar'],
+      ['📚 Kurslar'],
+      ['📋 Guruhlar'],
+      ['📅 Darslar'],
+      ['📅 Davomat'],
+      ['📊 Hisobotlar'],
+      ['💰 To‘lovlar'],
+      ['🪪 CHESARA Pasport'],
+      ['🏢 Markaz / Shaxsiy kurs'],
+      ['🧩 Tizim qurish'],
+      ['⚙️ Profil'],
+      ['🔄 Rolni o‘zgartirish'],
+      ['🏠 Bosh menyu']
+    ],
+    resize_keyboard: true,
+    is_persistent: true
+  }
+};
+
+/* =========================================================
+   O‘QUVCHI MENYU
+========================================================= */
+
+const studentMenu = {
+  reply_markup: {
+    keyboard: [
+      ['📚 Darslarim'],
+      ['📅 Davomatim'],
+      ['🧠 O‘yin tahlili'],
+      ['🏆 Turnirlar'],
+      ['📈 Rivojlanishim'],
+      ['🪪 CHESARA Pasport'],
+      ['🔎 ID orqali tekshirish'],
+      ['⚙️ Profil'],
+      ['🔄 Rolni o‘zgartirish'],
+      ['🏠 Bosh menyu']
+    ],
+    resize_keyboard: true,
+    is_persistent: true
+  }
+};
+
+/* =========================================================
+   OTA-ONA MENYU
+========================================================= */
+
+const parentMenu = {
+  reply_markup: {
+    keyboard: [
+      ['👨‍👩‍👧 Farzandlarim'],
+      ['📊 Natijalar'],
+      ['📅 Davomat'],
+      ['🔔 Ogohlantirishlar'],
+      ['🪪 CHESARA Pasport'],
+      ['🔎 ID orqali tekshirish'],
+      ['⚙️ Profil'],
+      ['🔄 Rolni o‘zgartirish'],
+      ['🏠 Bosh menyu']
+    ],
+    resize_keyboard: true,
+    is_persistent: true
+  }
+};
+
+/* =========================================================
+   ORQAGA
+========================================================= */
+
+const backMenu = {
+  reply_markup: {
+    keyboard: [
+      ['🏠 Bosh menyu']
+    ],
+    resize_keyboard: true
+  }
+};
+
+/* =========================================================
+   ROL TANLASH
+========================================================= */
+
+const roleMenu = {
+  reply_markup: {
     inline_keyboard: [
       [
         {
-          text:
-            '📢 @uzchesara kanaliga obuna bo‘lish',
-          url:
-            'https://t.me/uzchesara'
+          text: '👨‍🏫 Ustoz',
+          callback_data: 'role_teacher'
         }
       ],
       [
         {
-          text:
-            '✅ Obunani tekshirish',
-          callback_data:
-            'check_subscription'
+          text: '👨‍🎓 O‘quvchi',
+          callback_data: 'role_student'
+        }
+      ],
+      [
+        {
+          text: '👨‍👩‍👧 Ota-ona',
+          callback_data: 'role_parent'
         }
       ]
     ]
-  };
-}
+  }
+};
 
-function roleKeyboard() {
-  return {
+/* =========================================================
+   USTOZ FAOLIYAT TURI
+========================================================= */
+
+const teacherTypeMenu = {
+  reply_markup: {
     inline_keyboard: [
       [
         {
-          text:
-            '👨‍👩‍👧 Ota-ona',
-          callback_data:
-            'role_parent'
+          text: '🏢 Mavjud markazga qo‘shilaman',
+          callback_data: 'teacher_join_center'
         }
       ],
       [
         {
-          text:
-            '👨‍🎓 O‘quvchi',
-          callback_data:
-            'role_student'
+          text: '🌐 Mustaqil / shaxsiy kurs',
+          callback_data: 'teacher_independent'
         }
       ],
       [
         {
-          text:
-            '👨‍🏫 Ustoz',
-          callback_data:
-            'role_teacher'
+          text: '⬅️ Orqaga',
+          callback_data: 'home'
         }
-      ],
-      [
-        {
-          text:
-            '🏢 Markazga qo‘shilish',
-          callback_data:
-            'join_center'
-        }
-      ],
-      [
-        {
-          text:
-            '🌐 CHESARA sayt',
-          web_app: {
-            url: PUBLIC_URL
+      ]
+    ]
+  }
+};
+
+/* =========================================================
+   ADMIN CRUD MENYU
+========================================================= */
+
+function adminCrudMenu(type) {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: '➕ Qo‘shish',
+            callback_data: `crud_add_${type}`
           }
-        }
-      ],
-      [
-        {
-          text:
-            'ℹ️ Yordam',
-          callback_data:
-            'help'
-        }
+        ],
+        [
+          {
+            text: '✏️ Tahrirlash',
+            callback_data: `crud_edit_${type}`
+          }
+        ],
+        [
+          {
+            text: '🗑 O‘chirish',
+            callback_data: `crud_delete_${type}`
+          }
+        ],
+        [
+          {
+            text: '👁 Ko‘rish',
+            callback_data: `crud_view_${type}`
+          }
+        ],
+        [
+          {
+            text: '⬅️ Super Admin',
+            callback_data: 'admin_home'
+          }
+        ]
       ]
-    ]
+    }
   };
 }
 
-function parentKeyboard() {
-  return {
+/* =========================================================
+   PASPORT MENYU
+========================================================= */
+
+const passportMenu = {
+  reply_markup: {
     inline_keyboard: [
       [
         {
-          text:
-            '👨‍👩‍👧 Farzandlarim',
-          callback_data:
-            'parent_children'
+          text: '🪪 Mening CHESARA Pasportim',
+          callback_data: 'passport_me'
         }
       ],
       [
         {
-          text:
-            '📊 Farzandim natijalari',
-          callback_data:
-            'parent_results'
+          text: '🔎 ID orqali tekshirish',
+          callback_data: 'passport_verify'
         }
       ],
       [
         {
-          text:
-            '📅 Davomat',
-          callback_data:
-            'parent_attendance'
-        }
-      ],
-      [
-        {
-          text:
-            '⬅️ Rolni o‘zgartirish',
-          callback_data:
-            'change_role'
+          text: '⬅️ Orqaga',
+          callback_data: 'home'
         }
       ]
     ]
-  };
-}
-
-function studentKeyboard() {
-  return {
-    inline_keyboard: [
-      [
-        {
-          text:
-            '📚 Darslarim',
-          callback_data:
-            'student_lessons'
-        }
-      ],
-      [
-        {
-          text:
-            '📅 Davomatim',
-          callback_data:
-            'student_attendance'
-        }
-      ],
-      [
-        {
-          text:
-            '🏆 Turnirlar',
-          callback_data:
-            'student_tournaments'
-        }
-      ],
-      [
-        {
-          text:
-            '🧠 O‘yin tahlili',
-          callback_data:
-            'analysis'
-        }
-      ],
-      [
-        {
-          text:
-            '⚙️ Profil',
-          callback_data:
-            'profile'
-        }
-      ],
-      [
-        {
-          text:
-            '🔄 /rol',
-          callback_data:
-            'change_role'
-        }
-      ]
-    ]
-  };
-}
-
-function teacherKeyboard() {
-  return {
-    inline_keyboard: [
-      [
-        {
-          text:
-            '📚 Darslar',
-          callback_data:
-            'teacher_lessons'
-        }
-      ],
-      [
-        {
-          text:
-            '📅 Davomat olish',
-          callback_data:
-            'attendance'
-        }
-      ],
-      [
-        {
-          text:
-            '👨‍🎓 O‘quvchilar',
-          callback_data:
-            'teacher_students'
-        }
-      ],
-      [
-        {
-          text:
-            '🏢 Markaz / kurs',
-          callback_data:
-            'teacher_center'
-        }
-      ],
-      [
-        {
-          text:
-            '📊 Hisobotlar',
-          callback_data:
-            'reports'
-        }
-      ],
-      [
-        {
-          text:
-            '🧩 Tizim qurish',
-          callback_data:
-            'teacher_build'
-        }
-      ],
-      [
-        {
-          text:
-            '⚙️ Profil',
-          callback_data:
-            'profile'
-        }
-      ],
-      [
-        {
-          text:
-            '🔄 /rol',
-          callback_data:
-            'change_role'
-        }
-      ]
-    ]
-  };
-}
-
-function superAdminKeyboard() {
-  return {
-    inline_keyboard: [
-      [
-        {
-          text:
-            '👥 Foydalanuvchilar',
-          callback_data:
-            'admin_users'
-        }
-      ],
-      [
-        {
-          text:
-            '🏢 Markazlar',
-          callback_data:
-            'admin_centers'
-        }
-      ],
-      [
-        {
-          text:
-            '📚 Kurslar',
-          callback_data:
-            'admin_courses'
-        }
-      ],
-      [
-        {
-          text:
-            '📋 Guruhlar',
-          callback_data:
-            'admin_groups'
-        }
-      ],
-      [
-        {
-          text:
-            '🧩 Menyular',
-          callback_data:
-            'admin_menus'
-        }
-      ],
-      [
-        {
-          text:
-            '✏️ Matnlar',
-          callback_data:
-            'admin_texts'
-        }
-      ],
-      [
-        {
-          text:
-            '📢 Kanal / obuna',
-          callback_data:
-            'admin_subscription'
-        }
-      ],
-      [
-        {
-          text:
-            '⚙️ Tizim sozlamalari',
-          callback_data:
-            'admin_settings'
-        }
-      ],
-      [
-        {
-          text:
-            '👑 Super Admin profili',
-          callback_data:
-            'admin_profile'
-        }
-      ]
-    ]
-  };
-}
-
-function backKeyboard(action = 'home') {
-  return {
-    inline_keyboard: [
-      [
-        {
-          text:
-            '⬅️ Orqaga',
-          callback_data:
-            action
-        }
-      ]
-    ]
-  };
-}
-
-function backToRolesKeyboard() {
-  return {
-    inline_keyboard: [
-      [
-        {
-          text:
-            '⬅️ Asosiy menyu',
-          callback_data:
-            'home'
-        }
-      ]
-    ]
-  };
-}
-
-/*
-============================================================
- MATNLAR
-============================================================
-*/
-
-function subscriptionText() {
-  return [
-    '♟️ CHESARA',
-    '',
-    'Botdan foydalanish uchun',
-    'rasmiy kanalimizga obuna bo‘lish kerak.',
-    '',
-    '📢 @uzchesara',
-    '',
-    'Obuna bo‘lgach,',
-    '«✅ Obunani tekshirish» tugmasini bosing.'
-  ].join('\n');
-}
-
-function telegramHomeText(
-  firstName = 'Foydalanuvchi'
-) {
-  return [
-    `♟️ Assalomu alaykum, ${firstName}!`,
-    '',
-    'CHESARA platformasiga xush kelibsiz.',
-    '',
-    'Avval o‘zingizga mos rolni tanlang:'
-  ].join('\n');
-}
-
-function roleText(role) {
-  if (role === ROLES.PARENT) {
-    return [
-      '👨‍👩‍👧 OTA-ONA',
-      '',
-      'Ota-ona paneliga xush kelibsiz.',
-      '',
-      'Farzandingizning darslari,',
-      'davomati va natijalarini ko‘rishingiz mumkin.'
-    ].join('\n');
   }
+};
 
-  if (role === ROLES.STUDENT) {
-    return [
-      '👨‍🎓 O‘QUVCHI',
-      '',
-      'O‘quvchi paneliga xush kelibsiz.',
-      '',
-      'Darslar, davomat, turnirlar',
-      'va shaxmat tahlillaridan foydalanishingiz mumkin.'
-    ].join('\n');
-  }
+/* =========================================================
+   SUPER ADMIN
+========================================================= */
 
-  if (role === ROLES.TEACHER) {
-    return [
-      '👨‍🏫 USTOZ',
-      '',
-      'Ustoz paneliga xush kelibsiz.',
-      '',
-      'Siz markazga qo‘shilishingiz',
-      'yoki mustaqil kurs sifatida ishlashingiz mumkin.'
-    ].join('\n');
-  }
-
-  return [
-    '♟️ CHESARA',
-    '',
-    'Davom etish uchun rol tanlang.'
-  ].join('\n');
-}
-
-/*
-============================================================
- SUPER ADMIN
-============================================================
-*/
-
-function superAdminText() {
-  return [
-    '👑 CHESARA SUPER ADMIN',
-    '',
-    `Telegram ID: ${SUPER_ADMIN.telegramId}`,
-    `Username: @${SUPER_ADMIN.username}`,
-    '',
-    'Sizda CHESARA tizimining barcha',
-    'qismlarini boshqarish huquqi mavjud.',
-    '',
-    'Menyu, matn, foydalanuvchi, markaz,',
-    'kanal/obuna va boshqa tizim sozlamalari'
-    ,'shu yerdan boshqariladi.'
-  ].join('\n');
-}
-
-async function sendSuperAdminMenu(
-  chatId
-) {
-  if (!bot) return;
-
+async function showSuperAdmin(chatId) {
   await bot.sendMessage(
     chatId,
-    superAdminText(),
-    {
-      reply_markup:
-        superAdminKeyboard()
-    }
+    [
+      '👑 CHESARA SUPER ADMIN',
+      '',
+      `CHESARA ID: ${SUPER_ADMIN.telegramId}`,
+      `Telegram: @${SUPER_ADMIN.username}`,
+      '',
+      'Siz CHESARA tizimining barcha qismlarini',
+      'boshqarishingiz mumkin.',
+      '',
+      '🔐 To‘liq huquq:',
+      '• Foydalanuvchilar',
+      '• Pasportlar',
+      '• Markazlar',
+      '• Direktorlar',
+      '• Nazoratchilar',
+      '• Ustozlar',
+      '• Kurslar',
+      '• Guruhlar',
+      '• Darslar',
+      '• Menyular',
+      '• Matnlar',
+      '• Kanal / obuna',
+      '• Tizim sozlamalari'
+    ].join('\n'),
+    superAdminMenu
   );
 }
 
-/*
-============================================================
- OBUNA
-============================================================
-*/
+/* =========================================================
+   START
+========================================================= */
 
-async function checkUserSubscription(
-  chatId
-) {
-  if (!bot) {
-    return false;
-  }
-
-  /*
-    SUPER ADMIN uchun obuna cheklovi yo‘q.
-  */
-
-  if (isSuperAdmin(chatId)) {
-    return true;
-  }
-
-  try {
-    return await isSubscribed(
-      bot,
-      chatId
-    );
-  } catch (error) {
-    console.error(
-      '❌ Obuna tekshirish xatosi:',
-      error.message
-    );
-
-    return false;
-  }
-}
-
-async function requireChannelSubscription(
-  chatId
-) {
-  if (isSuperAdmin(chatId)) {
-    return true;
-  }
-
-  const subscribed =
-    await checkUserSubscription(
-      chatId
-    );
-
-  if (subscribed) {
-    return true;
-  }
-
-  await bot.sendMessage(
-    chatId,
-    subscriptionText(),
-    {
-      reply_markup:
-        subscriptionKeyboard()
-    }
-  );
-
-  return false;
-}
-
-/*
-============================================================
- ROL MENUSI
-============================================================
-*/
-
-async function sendRoleMenu(
-  chatId,
-  firstName = 'Foydalanuvchi'
-) {
-  if (!bot) return;
-
-  if (isSuperAdmin(chatId)) {
-    await sendSuperAdminMenu(chatId);
-    return;
-  }
-
-  const subscribed =
-    await checkUserSubscription(
-      chatId
-    );
-
-  if (!subscribed) {
-    await bot.sendMessage(
-      chatId,
-      subscriptionText(),
-      {
-        reply_markup:
-          subscriptionKeyboard()
-      }
-    );
-
-    return;
-  }
-
-  const user =
-    getUser(chatId);
-
-  /*
-    Agar foydalanuvchi avval rol tanlagan bo‘lsa,
-    rol tanlash oynasini qayta ko‘rsatmaymiz.
-  */
-
-  if (user?.role) {
-    await sendSelectedRoleMenu(
-      chatId,
-      user.role
-    );
-
+async function showStart(chatId, firstName, user) {
+  if (isSuperAdmin(user)) {
+    await showSuperAdmin(chatId);
     return;
   }
 
   await bot.sendMessage(
     chatId,
-    telegramHomeText(firstName),
-    {
-      reply_markup:
-        roleKeyboard()
-    }
+    [
+      `♟️ CHESARA'ga xush kelibsiz, ${firstName}!`,
+      '',
+      '🌍 AI Shaxmat Platformasi',
+      '',
+      'CHESARA orqali:',
+      '',
+      '👨‍🏫 Ustoz',
+      '👨‍🎓 O‘quvchi',
+      '👨‍👩‍👧 Ota-ona',
+      '',
+      'sifatida foydalanishingiz mumkin.',
+      '',
+      'Iltimos, o‘zingizga mos rolni tanlang.'
+    ].join('\n'),
+    roleMenu
   );
 }
 
-async function sendSelectedRoleMenu(
-  chatId,
-  role
-) {
-  if (!bot) return;
+/* =========================================================
+   PASPORT
+========================================================= */
 
-  if (isSuperAdmin(chatId)) {
-    await sendSuperAdminMenu(chatId);
-    return;
-  }
+async function sendPassport(chatId, user) {
+  const telegramId = user?.id || '-';
 
-  const subscribed =
-    await checkUserSubscription(
-      chatId
-    );
+  await bot.sendMessage(
+    chatId,
+    [
+      '🪪 CHESARA PASPORTI',
+      '',
+      `CHESARA ID: CH-${telegramId}`,
+      '',
+      `Ism: ${user?.first_name || '-'}`,
+      `Familiya: ${user?.last_name || '-'}`,
+      `Telegram: ${
+        user?.username
+          ? '@' + user.username
+          : '-'
+      }`,
+      '',
+      '👤 Maqom: Hozircha aniqlanmagan',
+      '🏢 Markaz: Hozircha biriktirilmagan',
+      '👨‍🏫 CHESARA trener: Tekshirilmoqda',
+      '',
+      '📜 Sertifikatlar:',
+      'Hozircha sertifikat mavjud emas.',
+      '',
+      'CHESARA Pasporti foydalanuvchining',
+      'platformadagi rasmiy profilidir.'
+    ].join('\n'),
+    passportMenu
+  );
+}
 
-  if (!subscribed) {
+/* =========================================================
+   ID TEKSHIRISH
+========================================================= */
+
+async function requestPassportVerification(chatId, userId) {
+  setUserState(userId, {
+    action: 'verify_passport'
+  });
+
+  await bot.sendMessage(
+    chatId,
+    [
+      '🔎 CHESARA ID ORQALI TEKSHIRISH',
+      '',
+      'Tekshirmoqchi bo‘lgan CHESARA ID raqamini',
+      'yuboring.',
+      '',
+      'Masalan:',
+      'CH-1148401454',
+      '',
+      '⬅️ Bekor qilish uchun:',
+      '/bekor'
+    ].join('\n'),
+    backMenu
+  );
+}
+
+/* =========================================================
+   ROLE TEXT
+========================================================= */
+
+const roleTexts = {
+  teacher: [
+    '👨‍🏫 USTOZ',
+    '',
+    'Ustoz kabinetiga xush kelibsiz.',
+    '',
+    'Siz:',
+    '👥 O‘quvchilar',
+    '📚 Kurslar',
+    '📋 Guruhlar',
+    '📅 Darslar',
+    '✅ Davomat',
+    '💰 To‘lovlar',
+    '📊 Hisobotlar',
+    '🪪 CHESARA Pasport',
+    '',
+    'bilan ishlashingiz mumkin.'
+  ].join('\n'),
+
+  student: [
+    '👨‍🎓 O‘QUVCHI',
+    '',
+    'O‘quvchi kabinetiga xush kelibsiz.',
+    '',
+    '📚 Darslar',
+    '📅 Davomat',
+    '🧠 O‘yin tahlili',
+    '🏆 Turnirlar',
+    '📈 Rivojlanish',
+    '🪪 CHESARA Pasport'
+  ].join('\n'),
+
+  parent: [
+    '👨‍👩‍👧 OTA-ONA',
+    '',
+    'Ota-ona kabinetiga xush kelibsiz.',
+    '',
+    'Farzandingizning:',
+    '📚 Darslari',
+    '📅 Davomati',
+    '📊 Natijalari',
+    '📈 Rivojlanishi',
+    '',
+    'shu yerda ko‘rsatiladi.'
+  ].join('\n')
+};
+
+/* =========================================================
+   ROLE
+========================================================= */
+
+async function showRole(chatId, role) {
+
+  if (role === 'teacher') {
     await bot.sendMessage(
       chatId,
-      subscriptionText(),
-      {
-        reply_markup:
-          subscriptionKeyboard()
-      }
+      roleTexts.teacher,
+      teacherMenu
     );
 
-    return;
-  }
-
-  if (role === ROLES.PARENT) {
     await bot.sendMessage(
       chatId,
-      roleText(role),
-      {
-        reply_markup:
-          parentKeyboard()
-      }
+      [
+        '👨‍🏫 FAOLIYAT TURINI TANLANG',
+        '',
+        '🏢 Mavjud markazga qo‘shilish',
+        'yoki',
+        '🌐 Mustaqil / shaxsiy kurs'
+      ].join('\n'),
+      teacherTypeMenu
     );
 
     return;
   }
 
-  if (role === ROLES.STUDENT) {
+  if (role === 'student') {
     await bot.sendMessage(
       chatId,
-      roleText(role),
-      {
-        reply_markup:
-          studentKeyboard()
-      }
+      roleTexts.student,
+      studentMenu
     );
-
     return;
   }
 
-  if (role === ROLES.TEACHER) {
-    await sendTeacherMenu(
-      chatId
+  if (role === 'parent') {
+    await bot.sendMessage(
+      chatId,
+      roleTexts.parent,
+      parentMenu
     );
   }
 }
 
-async function sendTeacherMenu(
-  chatId
-) {
-  const user =
-    getUser(chatId);
+/* =========================================================
+   ADMIN SECTION
+========================================================= */
 
-  let extra = '';
+const adminTypes = {
+  users: 'users',
+  passports: 'passports',
+  centers: 'centers',
+  courses: 'courses',
+  groups: 'groups',
+  lessons: 'lessons',
+  teachers: 'teachers',
+  directors: 'directors',
+  controllers: 'controllers',
+  menus: 'menus',
+  texts: 'texts',
+  subscriptions: 'subscriptions'
+};
 
-  if (
-    user?.teacherType ===
-    'independent'
-  ) {
-    extra =
-      '\n\n🌐 Faoliyat turi: Mustaqil / shaxsiy kurs';
+const adminTitles = {
+  users: '👥 FOYDALANUVCHILAR',
+  passports: '🪪 CHESARA PASPORTLAR',
+  centers: '🏢 MARKAZLAR',
+  courses: '📚 KURSLAR',
+  groups: '📋 GURUHLAR',
+  lessons: '📅 DARSLAR',
+  teachers: '👨‍🏫 USTOZLAR',
+  directors: '👨‍💼 DIREKTORLAR',
+  controllers: '🛡 NAZORATCHILAR',
+  menus: '🧩 MENYULAR',
+  texts: '✏️ MATNLAR',
+  subscriptions: '📢 KANAL / OBUNA'
+};
+
+async function adminSection(chatId, type) {
+  const title = adminTitles[type] || '⚙️ BO‘LIM';
+
+  await bot.sendMessage(
+    chatId,
+    [
+      title,
+      '',
+      'Bu bo‘lim Super Admin tomonidan',
+      'to‘liq boshqariladi.',
+      '',
+      'Kerakli amalni tanlang:'
+    ].join('\n'),
+    adminCrudMenu(type)
+  );
+}
+
+/* =========================================================
+   CRUD ACTION
+========================================================= */
+
+async function handleCrudAction(chatId, user, action) {
+
+  if (!isSuperAdmin(user)) {
+    await bot.sendMessage(
+      chatId,
+      '❌ Bu amal faqat Super Admin uchun.',
+      backMenu
+    );
+    return;
   }
 
-  if (
-    user?.teacherType ===
-    'center' &&
-    user.centerId
-  ) {
-    const center =
-      getCenter(
-        user.centerId
+  const parts = action.split('_');
+  const operation = parts[1];
+  const type = parts.slice(2).join('_');
+
+  const title = adminTitles[type] || 'BO‘LIM';
+
+  if (operation === 'add') {
+    setUserState(user.id, {
+      action: 'admin_add',
+      type
+    });
+
+    await bot.sendMessage(
+      chatId,
+      [
+        '➕ QO‘SHISH',
+        '',
+        title,
+        '',
+        'Yangi ma’lumot uchun kerakli nom yoki',
+        'ma’lumotni yuboring.',
+        '',
+        'Masalan markaz bo‘lsa:',
+        'Markaz nomi + shahar',
+        '',
+        '🔧 Ma’lumotlar bazasi moduli ulanganida',
+        'bu amal real yozuv yaratadi.',
+        '',
+        '⬅️ Bekor qilish: /bekor'
+      ].join('\n'),
+      backMenu
+    );
+
+    return;
+  }
+
+  if (operation === 'edit') {
+    setUserState(user.id, {
+      action: 'admin_edit',
+      type
+    });
+
+    await bot.sendMessage(
+      chatId,
+      [
+        '✏️ TAHRIRLASH',
+        '',
+        title,
+        '',
+        'Tahrirlanadigan CHESARA ID yoki',
+        'obyekt ID sini yuboring.',
+        '',
+        '⬅️ Bekor qilish: /bekor'
+      ].join('\n'),
+      backMenu
+    );
+
+    return;
+  }
+
+  if (operation === 'delete') {
+    setUserState(user.id, {
+      action: 'admin_delete',
+      type
+    });
+
+    await bot.sendMessage(
+      chatId,
+      [
+        '🗑 O‘CHIRISH',
+        '',
+        title,
+        '',
+        'O‘chiriladigan obyektning ID raqamini',
+        'yuboring.',
+        '',
+        '⚠️ O‘chirishdan oldin CHESARA',
+        'tasdiqlashni talab qiladi.',
+        '',
+        '⬅️ Bekor qilish: /bekor'
+      ].join('\n'),
+      backMenu
+    );
+
+    return;
+  }
+
+  if (operation === 'view') {
+    await bot.sendMessage(
+      chatId,
+      [
+        '👁 KO‘RISH',
+        '',
+        title,
+        '',
+        'Bu yerda mavjud yozuvlar ro‘yxati',
+        'ko‘rsatiladi.',
+        '',
+        '🔧 Real ma’lumotlar bazasi bilan',
+        'keyingi backend modulida ulanadi.'
+      ].join('\n'),
+      adminCrudMenu(type)
+    );
+  }
+}
+
+/* =========================================================
+   START
+========================================================= */
+
+async function handleText(msg) {
+
+  if (!msg || !msg.text) return;
+
+  const chatId = msg.chat.id;
+  const text = msg.text.trim();
+  const user = msg.from || {};
+
+  /* ---------------------------------------------
+     BEKOR
+  --------------------------------------------- */
+
+  if (text === '/bekor') {
+    clearUserState(user.id);
+
+    await showStart(
+      chatId,
+      user.first_name || 'shaxmatchi',
+      user
+    );
+
+    return;
+  }
+
+  /* ---------------------------------------------
+     STATE
+  --------------------------------------------- */
+
+  const state = getUserState(user.id);
+
+  if (state) {
+
+    if (state.action === 'verify_passport') {
+
+      clearUserState(user.id);
+
+      await bot.sendMessage(
+        chatId,
+        [
+          '🔎 CHESARA ID TEKSHIRUVI',
+          '',
+          `Kiritilgan ID: ${text}`,
+          '',
+          '⏳ Ma’lumotlar bazasidan tekshirilmoqda...',
+          '',
+          '🔧 Pasport bazasi backend moduliga',
+          'ulangandan so‘ng bu yerda:',
+          '',
+          '🪪 Pasport',
+          '👤 F.I.Sh.',
+          '📸 Foto',
+          '👨‍🏫 Trener maqomi',
+          '🏢 Markaz',
+          '📜 Sertifikatlar',
+          '✅ CHESARAda faol yoki faol emasligi',
+          '',
+          'to‘liq ko‘rsatiladi.'
+        ].join('\n'),
+        backMenu
       );
 
-    if (center) {
-      extra =
-        `\n\n🏢 Markaz: ${center.name}`;
+      return;
+    }
+
+    if (
+      state.action === 'admin_add' ||
+      state.action === 'admin_edit' ||
+      state.action === 'admin_delete'
+    ) {
+
+      const actionText =
+        state.action === 'admin_add'
+          ? '➕ QO‘SHISH'
+          : state.action === 'admin_edit'
+            ? '✏️ TAHRIRLASH'
+            : '🗑 O‘CHIRISH';
+
+      const typeTitle =
+        adminTitles[state.type] ||
+        'BO‘LIM';
+
+      clearUserState(user.id);
+
+      await bot.sendMessage(
+        chatId,
+        [
+          actionText,
+          '',
+          typeTitle,
+          '',
+          `Qabul qilindi: ${text}`,
+          '',
+          '🔧 Keyingi backend bosqichida',
+          'bu amal ma’lumotlar bazasiga ulanadi.'
+        ].join('\n'),
+        adminCrudMenu(state.type)
+      );
+
+      return;
     }
   }
 
-  await bot.sendMessage(
-    chatId,
-    roleText(
-      ROLES.TEACHER
-    ) + extra,
-    {
-      reply_markup:
-        teacherKeyboard()
-    }
-  );
-}
+  /* ---------------------------------------------
+     START
+  --------------------------------------------- */
 
-/*
-============================================================
- USTOZ TANLOVI
-============================================================
-*/
-
-function teacherTypeKeyboard() {
-  return {
-    inline_keyboard: [
-      [
-        {
-          text:
-            '🏢 Mavjud markazga qo‘shilaman',
-          callback_data:
-            'teacher_join_center'
-        }
-      ],
-      [
-        {
-          text:
-            '🌐 Mustaqil / shaxsiy kurs',
-          callback_data:
-            'teacher_independent'
-        }
-      ],
-      [
-        {
-          text:
-            '⬅️ Orqaga',
-          callback_data:
-            'home'
-        }
-      ]
-    ]
-  };
-}
-
-async function sendTeacherTypeMenu(
-  chatId
-) {
-  await bot.sendMessage(
-    chatId,
-    [
-      '👨‍🏫 USTOZ',
-      '',
-      'Siz qanday faoliyat yuritasiz?',
-      '',
-      '🏢 Mavjud o‘quv markaziga qo‘shilishingiz mumkin.',
-      '',
-      '🌐 Yoki hech qanday markazsiz',
-      'mustaqil / shaxsiy kurs sifatida ishlashingiz mumkin.'
-    ].join('\n'),
-    {
-      reply_markup:
-        teacherTypeKeyboard()
-    }
-  );
-}
-
-/*
-============================================================
- MARKAZLAR
-============================================================
-*/
-
-function centersKeyboard() {
-  const centers =
-    getCenters();
-
-  const rows =
-    centers.map(center => [
-      {
-        text:
-          `🏢 ${center.name}`,
-        callback_data:
-          `center_join_${center.id}`
-      }
-    ]);
-
-  rows.push([
-    {
-      text:
-        '⬅️ Orqaga',
-      callback_data:
-        'teacher_type'
-    }
-  ]);
-
-  return {
-    inline_keyboard:
-      rows
-  };
-}
-
-async function sendCenters(
-  chatId
-) {
-  const centers =
-    getCenters();
-
-  if (centers.length === 0) {
-    await bot.sendMessage(
+  if (text === '/start') {
+    await showStart(
       chatId,
-      [
-        '🏢 MARKAZLAR',
-        '',
-        'Hozircha CHESARAda mavjud',
-        'o‘quv markazlari yo‘q.',
-        '',
-        'Siz mustaqil / shaxsiy kurs',
-        'sifatida boshlashingiz mumkin.'
-      ].join('\n'),
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text:
-                  '🌐 Shaxsiy kurs',
-                callback_data:
-                  'teacher_independent'
-              }
-            ],
-            [
-              {
-                text:
-                  '⬅️ Orqaga',
-                callback_data:
-                  'teacher_type'
-              }
-            ]
-          ]
-        }
-      }
+      user.first_name || 'shaxmatchi',
+      user
     );
+    return;
+  }
+
+  /* ---------------------------------------------
+     ADMIN
+  --------------------------------------------- */
+
+  if (text === '/admin') {
+
+    if (isSuperAdmin(user)) {
+      await showSuperAdmin(chatId);
+    } else {
+      await bot.sendMessage(
+        chatId,
+        '❌ Sizda Super Admin huquqi yo‘q.',
+        backMenu
+      );
+    }
 
     return;
   }
 
-  await bot.sendMessage(
-    chatId,
-    [
-      '🏢 MARKAZLAR',
-      '',
-      'Qo‘shilmoqchi bo‘lgan markazingizni tanlang:'
-    ].join('\n'),
-    {
-      reply_markup:
-        centersKeyboard()
-    }
-  );
-}
-
-/*
-============================================================
- ROL TANLASH
-============================================================
-*/
-
-async function selectRole(
-  chatId,
-  fromUser,
-  role
-) {
-  const user =
-    ensureUser(fromUser);
-
-  if (!user) return;
-
-  const result =
-    setRole(
-      chatId,
-      role
-    );
-
-  if (!result.success) {
-    await bot.sendMessage(
-      chatId,
-      `🔒 ${result.message}`,
-      {
-        reply_markup:
-          backToRolesKeyboard()
-      }
-    );
-
-    return;
-  }
-
-  if (role === ROLES.TEACHER) {
-    await sendTeacherTypeMenu(
-      chatId
-    );
-
-    return;
-  }
-
-  await sendSelectedRoleMenu(
-    chatId,
-    role
-  );
-}
-
-/*
-============================================================
- ROLNI O‘ZGARTIRISH
-============================================================
-*/
-
-async function handleChangeRole(
-  chatId
-) {
-  const user =
-    getUser(chatId);
+  /* ---------------------------------------------
+     ROL
+  --------------------------------------------- */
 
   if (
-    isSuperAdmin(chatId)
+    text === '/rol' ||
+    text === '🔄 Rolni o‘zgartirish'
   ) {
+
+    if (isSuperAdmin(user)) {
+      await bot.sendMessage(
+        chatId,
+        [
+          '👑 SUPER ADMIN',
+          '',
+          'Siz uchun rol almashtirish cheklanmagan.',
+          '',
+          'Rolni tanlang:'
+        ].join('\n'),
+        roleMenu
+      );
+      return;
+    }
+
     await bot.sendMessage(
       chatId,
       [
-        '👑 SUPER ADMIN',
-        '',
-        'Siz rolni istalgan vaqtda',
-        'almashtirishingiz mumkin.',
+        '🔄 ROLNI O‘ZGARTIRISH',
         '',
         'Yangi rolni tanlang:'
       ].join('\n'),
-      {
-        reply_markup:
-          roleKeyboard()
-      }
+      roleMenu
     );
 
     return;
   }
 
-  if (!user?.role) {
-    await sendRoleMenu(
-      chatId
-    );
+  /* ---------------------------------------------
+     SUPER ADMIN MENYU
+  --------------------------------------------- */
 
+  if (isSuperAdmin(user)) {
+
+    const adminMap = {
+      '👥 Foydalanuvchilar': 'users',
+      '🪪 CHESARA Pasportlar': 'passports',
+      '🏢 Markazlar': 'centers',
+      '📚 Kurslar': 'courses',
+      '📋 Guruhlar': 'groups',
+      '📅 Darslar': 'lessons',
+      '👨‍🏫 Ustozlar': 'teachers',
+      '👨‍💼 Direktorlar': 'directors',
+      '🛡 Nazoratchilar': 'controllers',
+      '🧩 Menyular': 'menus',
+      '✏️ Matnlar': 'texts',
+      '📢 Kanal / Obuna': 'subscriptions'
+    };
+
+    if (adminMap[text]) {
+      await adminSection(
+        chatId,
+        adminMap[text]
+      );
+      return;
+    }
+
+    if (text === '👑 Super Admin') {
+      await showSuperAdmin(chatId);
+      return;
+    }
+
+    if (text === '⚙️ Tizim sozlamalari') {
+      await adminSection(
+        chatId,
+        'menus'
+      );
+      return;
+    }
+  }
+
+  /* ---------------------------------------------
+     BOSH MENYU
+  --------------------------------------------- */
+
+  if (text === '🏠 Bosh menyu') {
+    await showStart(
+      chatId,
+      user.first_name || 'shaxmatchi',
+      user
+    );
     return;
   }
 
-  if (
-    !canChangeRole(chatId)
-  ) {
+  /* ---------------------------------------------
+     PASPORT
+  --------------------------------------------- */
+
+  if (text === '🪪 CHESARA Pasport') {
+    await sendPassport(chatId, user);
+    return;
+  }
+
+  if (text === '🔎 ID orqali tekshirish') {
+    await requestPassportVerification(
+      chatId,
+      user.id
+    );
+    return;
+  }
+
+  /* ---------------------------------------------
+     USTOZ
+  --------------------------------------------- */
+
+  if (text === '👨‍🏫 Ustoz kabineti') {
     await bot.sendMessage(
       chatId,
-      [
-        `🔒 Hozirgi rolingiz: ${user.role}`,
-        '',
-        getRoleChangeMessage(user),
-        '',
-        'Rolni muddatidan oldin almashtirish',
-        'uchun Super Adminga murojaat qiling.'
-      ].join('\n'),
-      {
-        reply_markup:
-          backKeyboard()
-      }
+      roleTexts.teacher,
+      teacherMenu
     );
-
     return;
   }
 
-  await bot.sendMessage(
-    chatId,
-    [
-      `🔄 Hozirgi rolingiz: ${user.role}`,
-      '',
-      'Yangi rolni tanlang:'
-    ].join('\n'),
-    {
-      reply_markup:
-        roleKeyboard()
-    }
-  );
-}
-
-/*
-============================================================
- TELEGRAM ACTIONS
-============================================================
-*/
-
-async function handleTelegramAction(
-  chatId,
-  action,
-  fromUser
-) {
-  if (!bot) return;
-
-  const user =
-    ensureUser(fromUser);
-
-  const superAdmin =
-    userIsSuperAdmin(
-      fromUser
-    );
-
-  /*
-    SUPER ADMIN har doim kirishi mumkin.
-  */
-
-  if (
-    action ===
-    'check_subscription'
-  ) {
-    const subscribed =
-      await checkUserSubscription(
-        chatId
-      );
-
-    if (!subscribed) {
-      await bot.sendMessage(
-        chatId,
-        [
-          '❌ Hali obuna bo‘lmagansiz.',
-          '',
-          'Avval @uzchesara kanaliga obuna bo‘ling.',
-          '',
-          'Keyin yana tekshiring.'
-        ].join('\n'),
-        {
-          reply_markup:
-            subscriptionKeyboard()
-        }
-      );
-
-      return;
-    }
-
-    await sendRoleMenu(
-      chatId,
-      fromUser?.first_name ||
-        'Foydalanuvchi'
-    );
-
-    return;
-  }
-
-  if (!superAdmin) {
-    const subscribed =
-      await requireChannelSubscription(
-        chatId
-      );
-
-    if (!subscribed) {
-      return;
-    }
-  }
-
-  /*
-  ==========================================================
-  HOME
-  ==========================================================
-  */
-
-  if (action === 'home') {
-    await sendRoleMenu(
-      chatId,
-      fromUser?.first_name ||
-        'Foydalanuvchi'
-    );
-
-    return;
-  }
-
-  /*
-  ==========================================================
-  SUPER ADMIN
-  ==========================================================
-  */
-
-  if (superAdmin) {
-    if (
-      action ===
-      'admin_users'
-    ) {
-      const users =
-        getAllUsers();
-
-      const counts = {
-        total: users.length,
-        teachers:
-          users.filter(
-            u =>
-              u.role ===
-              ROLES.TEACHER
-          ).length,
-        students:
-          users.filter(
-            u =>
-              u.role ===
-              ROLES.STUDENT
-          ).length,
-        parents:
-          users.filter(
-            u =>
-              u.role ===
-              ROLES.PARENT
-          ).length
-      };
-
-      await bot.sendMessage(
-        chatId,
-        [
-          '👥 FOYDALANUVCHILAR',
-          '',
-          `Jami: ${counts.total}`,
-          `👨‍🏫 Ustozlar: ${counts.teachers}`,
-          `👨‍🎓 O‘quvchilar: ${counts.students}`,
-          `👨‍👩‍👧 Ota-onalar: ${counts.parents}`,
-          '',
-          'Keyingi bosqichda bu bo‘limdan',
-          'foydalanuvchilarni to‘liq boshqaramiz.'
-        ].join('\n'),
-        {
-          reply_markup:
-            backKeyboard(
-              'admin_home'
-            )
-        }
-      );
-
-      return;
-    }
-
-    if (
-      action ===
-      'admin_centers'
-    ) {
-      const centers =
-        getCenters();
-
-      await bot.sendMessage(
-        chatId,
-        [
-          '🏢 MARKAZLAR',
-          '',
-          `Jami markazlar: ${centers.length}`,
-          '',
-          centers.length
-            ? centers
-                .slice(0, 20)
-                .map(
-                  (c, i) =>
-                    `${i + 1}. ${c.name}`
-                )
-                .join('\n')
-            : 'Hozircha markaz yo‘q.',
-          '',
-          'Keyingi bosqichda markazlarni',
-          'shu menyudan yaratish va boshqarish qo‘shiladi.'
-        ].join('\n'),
-        {
-          reply_markup:
-            backKeyboard(
-              'admin_home'
-            )
-        }
-      );
-
-      return;
-    }
-
-    if (
-      action ===
-      'admin_courses'
-    ) {
-      await bot.sendMessage(
-        chatId,
-        [
-          '📚 KURSLAR',
-          '',
-          'Bu bo‘lim CHESARA kurslari',
-          'va metodikalarini boshqarish uchun bo‘ladi.',
-          '',
-          '🔧 Modul keyingi bosqichda ulanadi.'
-        ].join('\n'),
-        {
-          reply_markup:
-            backKeyboard(
-              'admin_home'
-            )
-        }
-      );
-
-      return;
-    }
-
-    if (
-      action ===
-      'admin_groups'
-    ) {
-      await bot.sendMessage(
-        chatId,
-        [
-          '📋 GURUHLAR',
-          '',
-          'Guruhlarni markaz, ustoz va',
-          'o‘quvchilar bilan bog‘lash moduli.',
-          '',
-          '🔧 Keyingi bosqichda ulanadi.'
-        ].join('\n'),
-        {
-          reply_markup:
-            backKeyboard(
-              'admin_home'
-            )
-        }
-      );
-
-      return;
-    }
-
-    if (
-      action ===
-      'admin_menus'
-    ) {
-      await bot.sendMessage(
-        chatId,
-        [
-          '🧩 MENYULAR',
-          '',
-          'Super Admin keyinchalik:',
-          '',
-          '• menyu qo‘shishi',
-          '• menyuni o‘chirishi',
-          '• nomini o‘zgartirishi',
-          '• tartibini o‘zgartirishi',
-          '• kimga ko‘rinishini belgilashi',
-          '',
-          'mumkin bo‘ladi.',
-          '',
-          '🔧 To‘liq menu builder keyingi bosqichda ulanadi.'
-        ].join('\n'),
-        {
-          reply_markup:
-            backKeyboard(
-              'admin_home'
-            )
-        }
-      );
-
-      return;
-    }
-
-    if (
-      action ===
-      'admin_texts'
-    ) {
-      await bot.sendMessage(
-        chatId,
-        [
-          '✏️ MATNLAR',
-          '',
-          'Super Admin barcha Telegram',
-          'matnlarini boshqarishi mumkin bo‘ladi.',
-          '',
-          '• Welcome',
-          '• Help',
-          '• Rol matnlari',
-          '• Tugma matnlari',
-          '• Obuna matnlari',
-          '',
-          '🔧 Matn editori keyingi bosqichda ulanadi.'
-        ].join('\n'),
-        {
-          reply_markup:
-            backKeyboard(
-              'admin_home'
-            )
-        }
-      );
-
-      return;
-    }
-
-    if (
-      action ===
-      'admin_subscription'
-    ) {
-      await bot.sendMessage(
-        chatId,
-        [
-          '📢 KANAL / OBUNA',
-          '',
-          'Super Admin bu yerdan:',
-          '',
-          '• kanalni',
-          '• guruhni',
-          '• obuna talabini',
-          '• obuna tekshiruvini',
-          '',
-          'boshqarishi mumkin bo‘ladi.',
-          '',
-          'Hozirgi kanal: @uzchesara'
-        ].join('\n'),
-        {
-          reply_markup:
-            backKeyboard(
-              'admin_home'
-            )
-        }
-      );
-
-      return;
-    }
-
-    if (
-      action ===
-      'admin_settings'
-    ) {
-      await bot.sendMessage(
-        chatId,
-        [
-          '⚙️ TIZIM SOZLAMALARI',
-          '',
-          '👑 Super Admin uchun barcha',
-          'tizim sozlamalari ochiq.',
-          '',
-          'Bu bo‘lim keyingi bosqichlarda',
-          'real sozlama paneliga aylantiriladi.'
-        ].join('\n'),
-        {
-          reply_markup:
-            backKeyboard(
-              'admin_home'
-            )
-        }
-      );
-
-      return;
-    }
-
-    if (
-      action ===
-      'admin_profile'
-    ) {
-      await bot.sendMessage(
-        chatId,
-        [
-          '👑 SUPER ADMIN PROFILI',
-          '',
-          `ID: ${SUPER_ADMIN.telegramId}`,
-          `Username: @${SUPER_ADMIN.username}`,
-          '',
-          '🔓 To‘liq tizim huquqi'
-        ].join('\n'),
-        {
-          reply_markup:
-            backKeyboard(
-              'admin_home'
-            )
-        }
-      );
-
-      return;
-    }
-
-    if (
-      action ===
-      'admin_home'
-    ) {
-      await sendSuperAdminMenu(
-        chatId
-      );
-
-      return;
-    }
-  }
-
-  /*
-  ==========================================================
-  ROL TANLASH
-  ==========================================================
-  */
-
-  if (
-    action ===
-    'role_parent'
-  ) {
-    await selectRole(
-      chatId,
-      fromUser,
-      ROLES.PARENT
-    );
-
-    return;
-  }
-
-  if (
-    action ===
-    'role_student'
-  ) {
-    await selectRole(
-      chatId,
-      fromUser,
-      ROLES.STUDENT
-    );
-
-    return;
-  }
-
-  if (
-    action ===
-    'role_teacher'
-  ) {
-    await selectRole(
-      chatId,
-      fromUser,
-      ROLES.TEACHER
-    );
-
-    return;
-  }
-
-  if (
-    action ===
-    'change_role'
-  ) {
-    await handleChangeRole(
-      chatId
-    );
-
-    return;
-  }
-
-  /*
-  ==========================================================
-  USTOZ FAOLIYAT TURI
-  ==========================================================
-  */
-
-  if (
-    action ===
-    'teacher_type'
-  ) {
-    await sendTeacherTypeMenu(
-      chatId
-    );
-
-    return;
-  }
-
-  if (
-    action ===
-    'teacher_independent'
-  ) {
-    const result =
-      setIndependentTeacher(
-        chatId
-      );
-
-    if (!result.success) {
-      await bot.sendMessage(
-        chatId,
-        `❌ ${result.message}`
-      );
-
-      return;
-    }
-
-    await bot.sendMessage(
-      chatId,
-      [
-        '🌐 MUSTAQIL USTOZ',
-        '',
-        'Siz mustaqil / shaxsiy kurs',
-        'sifatida belgilandingiz.',
-        '',
-        'Endi CHESARA orqali o‘zingiz:',
-        '• kurs',
-        '• guruh',
-        '• o‘quvchi',
-        '• dars',
-        '• davomat',
-        '• hisobot',
-        '',
-        'bilan ishlashingiz mumkin bo‘ladi.',
-        '',
-        '🔧 Keyingi modullarda bu funksiyalar to‘liq ulanadi.'
-      ].join('\n'),
-      {
-        reply_markup:
-          teacherKeyboard()
-      }
-    );
-
-    return;
-  }
-
-  if (
-    action ===
-    'teacher_join_center'
-  ) {
-    await sendCenters(
-      chatId
-    );
-
-    return;
-  }
-
-  if (
-    action.startsWith(
-      'center_join_'
-    )
-  ) {
-    const centerId =
-      action.replace(
-        'center_join_',
-        ''
-      );
-
-    const center =
-      getCenter(centerId);
-
-    if (!center) {
-      await bot.sendMessage(
-        chatId,
-        '❌ Markaz topilmadi.'
-      );
-
-      return;
-    }
-
-    const result =
-      requestCenterJoin({
-        telegramId: chatId,
-        centerId
-      });
-
-    if (!result.success) {
-      await bot.sendMessage(
-        chatId,
-        `❌ ${result.message}`
-      );
-
-      return;
-    }
-
-    await bot.sendMessage(
-      chatId,
-      [
-        '📨 SO‘ROV YUBORILDI',
-        '',
-        `🏢 Markaz: ${center.name}`,
-        '',
-        'Markazga qo‘shilish so‘rovingiz',
-        'Super Admin tomonidan ko‘rib chiqiladi.',
-        '',
-        'Tasdiqlangandan keyin markaz',
-        'tarkibida ishlashingiz mumkin bo‘ladi.'
-      ].join('\n'),
-      {
-        reply_markup:
-          teacherKeyboard()
-      }
-    );
-
-    return;
-  }
-
-  /*
-  ==========================================================
-  MARKAZ
-  ==========================================================
-  */
-
-  if (
-    action ===
-    'join_center'
-  ) {
-    await sendCenters(
-      chatId
-    );
-
-    return;
-  }
-
-  if (
-    action ===
-    'teacher_center'
-  ) {
-    const currentUser =
-      getUser(chatId);
-
-    if (
-      currentUser?.teacherType ===
-      'independent'
-    ) {
-      await bot.sendMessage(
-        chatId,
-        [
-          '🌐 SHAXSIY KURS',
-          '',
-          'Siz hozir mustaqil ustozsiz.',
-          '',
-          'Keyingi bosqichda bu yerdan',
-          'shaxsiy kursingizni to‘liq boshqarasiz.'
-        ].join('\n'),
-        {
-          reply_markup:
-            teacherKeyboard()
-        }
-      );
-
-      return;
-    }
-
-    if (
-      currentUser?.centerId
-    ) {
-      const center =
-        getCenter(
-          currentUser.centerId
-        );
-
-      await bot.sendMessage(
-        chatId,
-        [
-          '🏢 MARKAZ',
-          '',
-          `Nomi: ${center?.name || '-'}`,
-          '',
-          'Keyingi bosqichda markaz kabineti ulanadi.'
-        ].join('\n'),
-        {
-          reply_markup:
-            teacherKeyboard()
-        }
-      );
-
-      return;
-    }
-
-    await sendTeacherTypeMenu(
-      chatId
-    );
-
-    return;
-  }
-
-  /*
-  ==========================================================
-  YORDAM
-  ==========================================================
-  */
-
-  if (
-    action ===
-    'help'
-  ) {
-    await bot.sendMessage(
-      chatId,
-      [
-        'ℹ️ CHESARA YORDAM',
-        '',
-        '1️⃣ Kanalga obuna bo‘ling.',
-        '2️⃣ Rolni birinchi marta tanlang.',
-        '3️⃣ Ustoz bo‘lsangiz markazga qo‘shiling yoki mustaqil ishlang.',
-        '4️⃣ Keyingi bosqichlarda CHESARA kabinetlari orqali tizimni boshqaring.',
-        '',
-        'Rolni almashtirish uchun /rol buyrug‘idan foydalaning.'
-      ].join('\n'),
-      {
-        reply_markup:
-          backToRolesKeyboard()
-      }
-    );
-
-    return;
-  }
-
-  /*
-  ==========================================================
-  OTA-ONA
-  ==========================================================
-  */
-
-  if (
-    action ===
-    'parent_children'
-  ) {
-    await bot.sendMessage(
-      chatId,
-      '👨‍👩‍👧 Hozircha sizga biriktirilgan farzandlar yo‘q.',
-      {
-        reply_markup:
-          parentKeyboard()
-      }
-    );
-
-    return;
-  }
-
-  if (
-    action ===
-    'parent_results'
-  ) {
-    await bot.sendMessage(
-      chatId,
-      '📊 Farzandlar natijalari keyingi bosqichda ulanadi.',
-      {
-        reply_markup:
-          parentKeyboard()
-      }
-    );
-
-    return;
-  }
-
-  if (
-    action ===
-    'parent_attendance'
-  ) {
-    await bot.sendMessage(
-      chatId,
-      '📅 Farzandingiz davomatini keyingi bosqichda ko‘rsatamiz.',
-      {
-        reply_markup:
-          parentKeyboard()
-      }
-    );
-
-    return;
-  }
-
-  /*
-  ==========================================================
-  O‘QUVCHI
-  ==========================================================
-  */
-
-  if (
-    action ===
-    'student_lessons'
-  ) {
-    const lessons =
-      getLessons();
-
-    const text =
-      lessons.length > 0
-        ? lessons
-            .slice(0, 10)
-            .map(
-              (lesson, index) =>
-                [
-                  `${index + 1}. ♟️ ${
-                    lesson.groupName ||
-                    'Guruh'
-                  }`,
-                  `👨‍🏫 ${
-                    lesson.coachName ||
-                    'Ustoz'
-                  }`,
-                  `⏰ ${
-                    lesson.startTime ||
-                    '-'
-                  }`
-                ].join('\n')
-            )
-            .join('\n\n')
-        : '📚 Hozircha darslar yo‘q.';
-
-    await bot.sendMessage(
-      chatId,
-      `📚 DARSLARIM\n\n${text}`,
-      {
-        reply_markup:
-          studentKeyboard()
-      }
-    );
-
-    return;
-  }
-
-  if (
-    action ===
-    'student_attendance'
-  ) {
-    await bot.sendMessage(
-      chatId,
-      '📅 Sizning davomat ma’lumotlaringiz keyingi bosqichda ulanadi.',
-      {
-        reply_markup:
-          studentKeyboard()
-      }
-    );
-
-    return;
-  }
-
-  if (
-    action ===
-    'student_tournaments'
-  ) {
-    await bot.sendMessage(
-      chatId,
-      '🏆 Turnirlar bo‘limi keyingi bosqichda ulanadi.',
-      {
-        reply_markup:
-          studentKeyboard()
-      }
-    );
-
-    return;
-  }
-
-  /*
-  ==========================================================
-  USTOZ
-  ==========================================================
-  */
-
-  if (
-    action ===
-    'teacher_lessons'
-  ) {
-    const lessons =
-      getLessons();
-
-    await bot.sendMessage(
-      chatId,
-      [
-        '📚 USTOZ DARS LARI',
-        '',
-        `Jami darslar: ${lessons.length} ta`
-      ].join('\n'),
-      {
-        reply_markup:
-          teacherKeyboard()
-      }
-    );
-
-    return;
-  }
-
-  if (
-    action ===
-    'teacher_students'
-  ) {
-    const users =
-      getAllUsers();
-
-    const students =
-      users.filter(
-        u =>
-          u.role ===
-          ROLES.STUDENT
-      );
-
+  if (text === '👨‍🎓 O‘quvchilar') {
     await bot.sendMessage(
       chatId,
       [
         '👨‍🎓 O‘QUVCHILAR',
         '',
-        `CHESARA bazasidagi o‘quvchilar: ${students.length} ta`,
+        'Ustozning o‘quvchilari.',
         '',
-        'Keyingi bosqichda bu yerda',
-        'ustozning o‘z o‘quvchilari ko‘rsatiladi.'
+        '➕ O‘quvchi qo‘shish',
+        '✏️ Ma’lumotini tahrirlash',
+        '🗑 O‘quvchini chiqarish',
+        '👁 Profilini ko‘rish'
       ].join('\n'),
-      {
-        reply_markup:
-          teacherKeyboard()
-      }
+      teacherMenu
     );
-
     return;
   }
 
-  if (
-    action ===
-    'teacher_build'
-  ) {
+  if (text === '📚 Kurslar') {
+    await bot.sendMessage(
+      chatId,
+      [
+        '📚 KURSLAR',
+        '',
+        'Ustoz o‘z kurslarini boshqaradi.',
+        '',
+        '➕ Kurs qo‘shish',
+        '✏️ Tahrirlash',
+        '🗑 O‘chirish'
+      ].join('\n'),
+      teacherMenu
+    );
+    return;
+  }
+
+  if (text === '📋 Guruhlar') {
+    await bot.sendMessage(
+      chatId,
+      [
+        '📋 GURUHLAR',
+        '',
+        'Guruhlarni boshqarish.',
+        '',
+        '➕ Guruh qo‘shish',
+        '✏️ Tahrirlash',
+        '🗑 O‘chirish'
+      ].join('\n'),
+      teacherMenu
+    );
+    return;
+  }
+
+  if (text === '📅 Darslar') {
+    await bot.sendMessage(
+      chatId,
+      [
+        '📅 DARSLAR',
+        '',
+        'Ustoz darslarini boshqaradi.',
+        '',
+        '➕ Dars qo‘shish',
+        '✏️ Tahrirlash',
+        '🗑 O‘chirish'
+      ].join('\n'),
+      teacherMenu
+    );
+    return;
+  }
+
+  if (text === '💰 To‘lovlar') {
+    await bot.sendMessage(
+      chatId,
+      [
+        '💰 TO‘LOVLAR',
+        '',
+        'O‘quvchilar to‘lovlari va ustoz',
+        'hisob-kitoblari shu yerda boshqariladi.'
+      ].join('\n'),
+      teacherMenu
+    );
+    return;
+  }
+
+  if (text === '🏢 Markaz / Shaxsiy kurs') {
+    await bot.sendMessage(
+      chatId,
+      [
+        '🏢 / 🌐 FAOLIYAT TURI',
+        '',
+        'Qaysi shaklda ishlamoqchisiz?'
+      ].join('\n'),
+      teacherTypeMenu
+    );
+    return;
+  }
+
+  if (text === '🧩 Tizim qurish') {
     await bot.sendMessage(
       chatId,
       [
         '🧩 TIZIM QURISH',
         '',
-        'Ustoz uchun keyingi bosqichlarda:',
+        'Ustoz:',
         '',
-        '🏢 Markaz',
         '📚 Kurs',
         '📋 Guruh',
         '👨‍🎓 O‘quvchi',
-        '📅 Dars jadvali',
-        '📊 Hisobot',
+        '📅 Dars',
         '',
-        'modullari shu yerda boshqariladi.'
+        'yaratishi mumkin.'
       ].join('\n'),
-      {
-        reply_markup:
-          teacherKeyboard()
-      }
+      teacherMenu
     );
-
     return;
   }
 
-  if (
-    action ===
-    'attendance'
-  ) {
-    const lessons =
-      getLessons();
+  /* ---------------------------------------------
+     ODDIY BO‘LIMLAR
+  --------------------------------------------- */
 
-    const pending =
-      lessons.filter(
-        lesson =>
-          !lesson.attendanceTaken &&
-          !lesson.finished
-      );
+  if (text === '👨‍🎓 O‘quvchi kabineti') {
+    await bot.sendMessage(
+      chatId,
+      roleTexts.student,
+      studentMenu
+    );
+    return;
+  }
 
+  if (text === '📅 Davomat') {
     await bot.sendMessage(
       chatId,
       [
         '📅 DAVOMAT',
         '',
-        `Davomati kutilayotgan darslar: ${pending.length} ta.`
+        '✅ Keldi',
+        '❌ Kelmagan',
+        '⏰ Kechikdi',
+        '',
+        'Ustoz davomatni belgilaydi.'
       ].join('\n'),
-      {
-        reply_markup:
-          teacherKeyboard()
-      }
+      backMenu
     );
-
     return;
   }
 
-  if (
-    action ===
-    'reports'
-  ) {
-    const lessons =
-      getLessons();
-
-    const finished =
-      lessons.filter(
-        lesson =>
-          lesson.finished
-      ).length;
-
-    const attendance =
-      lessons.filter(
-        lesson =>
-          lesson.attendanceTaken
-      ).length;
-
+  if (text === '📊 Hisobotlar') {
     await bot.sendMessage(
       chatId,
       [
         '📊 HISOBOTLAR',
         '',
-        `Jami darslar: ${lessons.length} ta`,
-        `Davomati olingan: ${attendance} ta`,
-        `Yakunlangan: ${finished} ta`
+        '📅 Kunlik',
+        '📆 Haftalik',
+        '🗓️ Oylik',
+        '',
+        'Davomat, darslar, o‘quvchilar',
+        'va natijalar bo‘yicha hisobotlar.'
       ].join('\n'),
-      {
-        reply_markup:
-          teacherKeyboard()
-      }
+      backMenu
     );
-
     return;
   }
 
-  /*
-  ==========================================================
-  AI TAHLIL
-  ==========================================================
-  */
-
-  if (
-    action ===
-    'analysis'
-  ) {
+  if (text === '🧠 O‘yin tahlili') {
     await bot.sendMessage(
       chatId,
       [
-        '🧠 O‘YIN TAHLILI',
+        '🧠 AI O‘YIN TAHLILI',
         '',
-        'Bu bo‘limda shaxmat o‘yinlarini',
-        'AI va Stockfish yordamida',
-        'tahlil qilish tizimi ishlaydi.',
+        '♟️ Lichess',
+        '♟️ Chess.com',
+        '📸 Screenshot',
         '',
-        '🔧 AI moduli keyingi bosqichda ulanadi.'
+        'orqali o‘yinlarni tahlil qilish.'
       ].join('\n'),
-      {
-        reply_markup:
-          studentKeyboard()
-      }
+      backMenu
     );
-
     return;
   }
 
-  /*
-  ==========================================================
-  PROFIL
-  ==========================================================
-  */
-
-  if (
-    action ===
-    'profile'
-  ) {
-    const currentUser =
-      getUser(chatId);
-
+  if (text === '🏆 Turnirlar') {
     await bot.sendMessage(
       chatId,
       [
-        '👤 PROFIL',
+        '🏆 TURNIRLAR',
         '',
-        `Telegram ID: ${currentUser?.telegramId || chatId}`,
+        'Turnirlar, natijalar va',
+        'o‘quvchilar reytingi.'
+      ].join('\n'),
+      backMenu
+    );
+    return;
+  }
+
+  if (text === '📰 Yangiliklar') {
+    await bot.sendMessage(
+      chatId,
+      [
+        '📰 CHESARA YANGILIKLARI',
+        '',
+        'Turnirlar, g‘oliblar, natijalar',
+        'va shaxmat yangiliklari.'
+      ].join('\n'),
+      backMenu
+    );
+    return;
+  }
+
+  if (text === '🔔 Ogohlantirishlar') {
+    await bot.sendMessage(
+      chatId,
+      [
+        '🔔 OGOHLANTIRISHLAR',
+        '',
+        '⏰ Davomat',
+        '📅 Darslar',
+        '💰 To‘lovlar',
+        '👨‍🎓 O‘quvchilar',
+        '',
+        'bo‘yicha avtomatik nazorat.'
+      ].join('\n'),
+      backMenu
+    );
+    return;
+  }
+
+  /* ---------------------------------------------
+     PROFIL
+  --------------------------------------------- */
+
+  if (text === '⚙️ Profil') {
+    await bot.sendMessage(
+      chatId,
+      [
+        '⚙️ PROFIL',
+        '',
+        `Telegram ID: ${user.id || '-'}`,
         `Username: ${
-          currentUser?.username
-            ? '@' + currentUser.username
+          user.username
+            ? '@' + user.username
             : '-'
         }`,
-        `Rol: ${currentUser?.role || '-'}`,
-        `Faoliyat turi: ${
-          currentUser?.teacherType || '-'
-        }`
+        `Ism: ${user.first_name || '-'}`,
+        `Familiya: ${user.last_name || '-'}`,
+        '',
+        `CHESARA ID: CH-${user.id || '-'}`
       ].join('\n'),
-      {
-        reply_markup:
-          currentUser?.role ===
-          ROLES.TEACHER
-            ? teacherKeyboard()
-            : studentKeyboard()
-      }
+      backMenu
     );
-
     return;
   }
 
-  /*
-  ==========================================================
-  NOMA’LUM ACTION
-  ==========================================================
-  */
+  /* ---------------------------------------------
+     FALLBACK
+  --------------------------------------------- */
 
   await bot.sendMessage(
     chatId,
     [
-      '⚠️ Bu bo‘lim hali ulanmagan.',
+      '♟️ CHESARA',
       '',
-      'CHESARA ishlab chiqilishi davom etmoqda.'
+      'Iltimos, menyudan kerakli bo‘limni tanlang.',
+      '',
+      '/rol — rolni o‘zgartirish'
     ].join('\n'),
-    {
-      reply_markup:
-        superAdmin
-          ? superAdminKeyboard()
-          : roleKeyboard()
-    }
+    isSuperAdmin(user)
+      ? superAdminMenu
+      : mainMenu
   );
 }
 
-/*
-============================================================
- TELEGRAM
-============================================================
-*/
+/* =========================================================
+   CALLBACK
+========================================================= */
 
-async function setupTelegram() {
-  if (!BOT_TOKEN) {
-    console.log(
-      '⚠️ TELEGRAM_BOT_TOKEN topilmadi. Telegram bot o‘chiq.'
-    );
+async function handleCallback(query) {
 
+  const chatId = query.message?.chat?.id;
+  const action = query.data;
+  const user = query.from || {};
+
+  if (!chatId) return;
+
+  await bot
+    .answerCallbackQuery(query.id)
+    .catch(() => {});
+
+  /* ADMIN HOME */
+
+  if (action === 'admin_home') {
+    await showSuperAdmin(chatId);
     return;
   }
 
-  try {
-    const TelegramBot =
-      require('node-telegram-bot-api');
+  /* CRUD */
 
-    bot =
-      new TelegramBot(
-        BOT_TOKEN,
-        {
-          polling: false
-        }
-      );
-
-    const me =
-      await bot.getMe();
-
-    console.log(
-      `🤖 Telegram token topildi: @${
-        me.username ||
-        me.first_name
-      }`
-    );
-
-    await bot.deleteWebHook({
-      drop_pending_updates:
-        false
-    }).catch(() => {});
-
-    await bot.setWebHook(
-      WEBHOOK_URL
-    );
-
-    telegramReady = true;
-
-    console.log(
-      '🔗 Telegram webhook ulandi:'
-    );
-
-    console.log(
-      WEBHOOK_URL
-    );
-  } catch (error) {
-    telegramReady = false;
-
-    console.error(
-      '❌ Telegram webhook xatosi:',
-      error.message
-    );
-  }
-}
-
-/*
-============================================================
- TELEGRAM WEBHOOK
-============================================================
-*/
-
-app.post(
-  WEBHOOK_PATH,
-  async (req, res) => {
-    if (!bot) {
-      return res.sendStatus(503);
-    }
-
-    res.sendStatus(200);
-
-    try {
-      const update =
-        req.body;
-
-      /*
-      CALLBACK
-      */
-
-      if (
-        update.callback_query
-      ) {
-        const query =
-          update.callback_query;
-
-        const chatId =
-          query.message?.chat?.id;
-
-        const action =
-          query.data;
-
-        const fromUser =
-          query.from;
-
-        await bot
-          .answerCallbackQuery(
-            query.id
-          )
-          .catch(() => {});
-
-        if (
-          chatId &&
-          action
-        ) {
-          await handleTelegramAction(
-            chatId,
-            action,
-            fromUser
-          );
-        }
-
-        return;
-      }
-
-      /*
-      MESSAGE
-      */
-
-      if (
-        update.message
-      ) {
-        const message =
-          update.message;
-
-        const chatId =
-          message.chat?.id;
-
-        const firstName =
-          message.from?.first_name ||
-          'Foydalanuvchi';
-
-        const fromUser =
-          getTelegramUserFromMessage(
-            message
-          );
-
-        const text =
-          String(
-            message.text || ''
-          ).trim();
-
-        if (!chatId) {
-          return;
-        }
-
-        /*
-        FOYDALANUVCHINI BAZAGA YOZISH
-        */
-
-        ensureUser(
-          fromUser
-        );
-
-        /*
-        /start
-        */
-
-        if (
-          text === '/start' ||
-          text.startsWith('/start ')
-        ) {
-          await sendRoleMenu(
-            chatId,
-            firstName
-          );
-
-          return;
-        }
-
-        /*
-        /menu
-        */
-
-        if (
-          text === '/menu'
-        ) {
-          await sendRoleMenu(
-            chatId,
-            firstName
-          );
-
-          return;
-        }
-
-        /*
-        /rol
-        */
-
-        if (
-          text === '/rol'
-        ) {
-          await handleChangeRole(
-            chatId
-          );
-
-          return;
-        }
-
-        /*
-        /admin
-        */
-
-        if (
-          text === '/admin'
-        ) {
-          if (
-            userIsSuperAdmin(
-              fromUser
-            )
-          ) {
-            await sendSuperAdminMenu(
-              chatId
-            );
-          } else {
-            await bot.sendMessage(
-              chatId,
-              '❌ Sizda Super Admin huquqi yo‘q.'
-            );
-          }
-
-          return;
-        }
-
-        /*
-        /markaz
-        */
-
-        if (
-          text === '/markaz'
-        ) {
-          const subscribed =
-            await requireChannelSubscription(
-              chatId
-            );
-
-          if (!subscribed) {
-            return;
-          }
-
-          const currentUser =
-            getUser(chatId);
-
-          if (
-            currentUser?.role ===
-            ROLES.TEACHER
-          ) {
-            await sendTeacherTypeMenu(
-              chatId
-            );
-          } else if (
-            userIsSuperAdmin(
-              fromUser
-            )
-          ) {
-            await sendSuperAdminMenu(
-              chatId
-            );
-          } else {
-            await bot.sendMessage(
-              chatId,
-              [
-                '🏢 MARKAZ',
-                '',
-                'Markaz bilan bog‘liq funksiyalar',
-                'ustoz roli orqali ishlaydi.'
-              ].join('\n')
-            );
-          }
-
-          return;
-        }
-
-        /*
-        Oddiy matn
-        */
-
-        if (
-          !userIsSuperAdmin(
-            fromUser
-          )
-        ) {
-          const subscribed =
-            await requireChannelSubscription(
-              chatId
-            );
-
-          if (!subscribed) {
-            return;
-          }
-        }
-
-        await bot.sendMessage(
-          chatId,
-          [
-            '♟️ CHESARA',
-            '',
-            'Iltimos, kerakli bo‘limni',
-            'menyudan tanlang.',
-            '',
-            'Rolni almashtirish kerak bo‘lsa:',
-            '/rol'
-          ].join('\n'),
-          {
-            reply_markup:
-              userIsSuperAdmin(
-                fromUser
-              )
-                ? superAdminKeyboard()
-                : roleKeyboard()
-          }
-        );
-      }
-    } catch (error) {
-      console.error(
-        '❌ Telegram update xatosi:',
-        error.message
-      );
-    }
-  }
-);
-
-/*
-============================================================
- HEALTH
-============================================================
-*/
-
-app.get(
-  '/health',
-  (req, res) => {
-    res.json({
-      success: true,
-      project: 'CHESARA',
-      status: 'online',
-      telegramBot:
-        Boolean(bot),
-      telegramWebhook:
-        telegramReady,
-      superAdmin:
-        SUPER_ADMIN,
-      serverTime:
-        new Date().toISOString()
-    });
-  }
-);
-
-/*
-============================================================
- DASHBOARD
-============================================================
-*/
-
-app.get(
-  '/api/dashboard',
-  (req, res) => {
-    try {
-      const lessons =
-        getLessons();
-
-      const users =
-        getAllUsers();
-
-      const centers =
-        getCenters();
-
-      res.json({
-        success: true,
-        project:
-          'CHESARA',
-
-        lessonsCount:
-          lessons.length,
-
-        usersCount:
-          users.length,
-
-        studentsCount:
-          users.filter(
-            u =>
-              u.role ===
-              ROLES.STUDENT
-          ).length,
-
-        teachersCount:
-          users.filter(
-            u =>
-              u.role ===
-              ROLES.TEACHER
-          ).length,
-
-        parentsCount:
-          users.filter(
-            u =>
-              u.role ===
-              ROLES.PARENT
-          ).length,
-
-        centersCount:
-          centers.length,
-
-        telegramBot:
-          Boolean(bot),
-
-        telegramWebhook:
-          telegramReady,
-
-        serverTime:
-          new Date().toISOString()
-      });
-    } catch (error) {
-      console.error(
-        'Dashboard xatosi:',
-        error
-      );
-
-      res.status(500).json({
-        success: false,
-        message:
-          'Dashboard ma’lumotlarini olishda xatolik.'
-      });
-    }
-  }
-);
-
-/*
-============================================================
- USERS API
-============================================================
-*/
-
-app.get(
-  '/api/users',
-  (req, res) => {
-    try {
-      res.json({
-        success: true,
-        count:
-          getAllUsers().length,
-        users:
-          getAllUsers()
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message:
-          'Foydalanuvchilarni olishda xatolik.'
-      });
-    }
-  }
-);
-
-app.get(
-  '/api/users/:telegramId',
-  (req, res) => {
-    try {
-      const user =
-        getUser(
-          req.params.telegramId
-        );
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message:
-            'Foydalanuvchi topilmadi.'
-        });
-      }
-
-      res.json({
-        success: true,
-        user
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message:
-          'Foydalanuvchini olishda xatolik.'
-      });
-    }
-  }
-);
-
-/*
-============================================================
- CENTERS API
-============================================================
-*/
-
-app.get(
-  '/api/centers',
-  (req, res) => {
-    try {
-      const centers =
-        getCenters();
-
-      res.json({
-        success: true,
-        count:
-          centers.length,
-        centers
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message:
-          'Markazlarni olishda xatolik.'
-      });
-    }
-  }
-);
-
-app.get(
-  '/api/centers/:id',
-  (req, res) => {
-    try {
-      const center =
-        getCenter(
-          req.params.id
-        );
-
-      if (!center) {
-        return res.status(404).json({
-          success: false,
-          message:
-            'Markaz topilmadi.'
-        });
-      }
-
-      res.json({
-        success: true,
-        center
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message:
-          'Markazni olishda xatolik.'
-      });
-    }
-  }
-);
-
-app.post(
-  '/api/centers',
-  (req, res) => {
-    try {
-      const {
-        name,
-        ownerTelegramId,
-        description
-      } = req.body;
-
-      if (!name) {
-        return res.status(400).json({
-          success: false,
-          message:
-            'Markaz nomi kerak.'
-        });
-      }
-
-      const center =
-        createCenter({
-          name,
-          ownerTelegramId,
-          description
-        });
-
-      res.status(201).json({
-        success: true,
-        message:
-          'Markaz yaratildi.',
-        center
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message:
-          'Markaz yaratishda xatolik.'
-      });
-    }
-  }
-);
-
-/*
-============================================================
- ROLE API
-============================================================
-*/
-
-app.get(
-  '/api/users/:telegramId/role',
-  (req, res) => {
-    try {
-      const user =
-        getUser(
-          req.params.telegramId
-        );
-
-      res.json({
-        success: true,
-        role:
-          user?.role || null,
-        isSuperAdmin:
-          isSuperAdmin(
-            req.params.telegramId
-          ),
-        canChangeRole:
-          canChangeRole(
-            req.params.telegramId
-          ),
-        nextRoleChange:
-          user
-            ? getNextRoleChangeDate(
-                user
-              )
-            : null
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message:
-          'Rolni olishda xatolik.'
-      });
-    }
-  }
-);
-
-/*
-============================================================
- DARSLAR
-============================================================
-*/
-
-app.get(
-  '/api/lessons',
-  (req, res) => {
-    try {
-      const lessons =
-        getLessons();
-
-      res.json({
-        success: true,
-        count:
-          lessons.length,
-        lessons
-      });
-    } catch (error) {
-      console.error(
-        'Darslar xatosi:',
-        error
-      );
-
-      res.status(500).json({
-        success: false,
-        message:
-          'Darslarni olishda xatolik.'
-      });
-    }
-  }
-);
-
-app.get(
-  '/api/lessons/:id',
-  (req, res) => {
-    try {
-      const lesson =
-        getLesson(
-          req.params.id
-        );
-
-      if (!lesson) {
-        return res.status(404).json({
-          success: false,
-          message:
-            'Dars topilmadi.'
-        });
-      }
-
-      res.json({
-        success: true,
-        lesson
-      });
-    } catch (error) {
-      console.error(
-        'Bitta dars xatosi:',
-        error
-      );
-
-      res.status(500).json({
-        success: false,
-        message:
-          'Darsni olishda xatolik.'
-      });
-    }
-  }
-);
-
-/*
-============================================================
- YANGI DARS
-============================================================
-*/
-
-app.post(
-  '/api/lessons',
-  (req, res) => {
-    try {
-      const {
-        id,
-        groupId,
-        groupName,
-        coachId,
-        coachName,
-        coachTelegramId,
-        directorTelegramId,
-        startTime,
-        durationMinutes
-      } = req.body;
-
-      if (
-        !groupName ||
-        !coachName ||
-        !startTime
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            'groupName, coachName va startTime kerak.'
-        });
-      }
-
-      const lesson =
-        addLesson({
-          id,
-          groupId,
-          groupName,
-          coachId,
-          coachName,
-          coachTelegramId,
-          directorTelegramId,
-          startTime,
-          durationMinutes:
-            Number(
-              durationMinutes
-            ) > 0
-              ? Number(
-                  durationMinutes
-                )
-              : 90
-        });
-
-      res.status(201).json({
-        success: true,
-        message:
-          'Dars muvaffaqiyatli yaratildi.',
-        lesson
-      });
-    } catch (error) {
-      console.error(
-        'Dars yaratish xatosi:',
-        error
-      );
-
-      res.status(500).json({
-        success: false,
-        message:
-          'Dars yaratishda xatolik.'
-      });
-    }
-  }
-);
-
-/*
-============================================================
- DAVOMAT
-============================================================
-*/
-
-app.post(
-  '/api/lessons/:id/attendance',
-  (req, res) => {
-    try {
-      const result =
-        markAttendance(
-          req.params.id
-        );
-
-      if (!result.success) {
-        return res.status(404).json(
-          result
-        );
-      }
-
-      res.json({
-        success: true,
-        message:
-          'Davomat muvaffaqiyatli qayd qilindi.',
-        lesson:
-          result.lesson
-      });
-    } catch (error) {
-      console.error(
-        'Davomat xatosi:',
-        error
-      );
-
-      res.status(500).json({
-        success: false,
-        message:
-          'Davomatni saqlashda xatolik.'
-      });
-    }
-  }
-);
-
-/*
-============================================================
- DARSNI YAKUNLASH
-============================================================
-*/
-
-app.post(
-  '/api/lessons/:id/finish',
-  (req, res) => {
-    try {
-      const result =
-        finishLesson(
-          req.params.id
-        );
-
-      if (!result) {
-        return res.status(404).json({
-          success: false,
-          message:
-            'Dars topilmadi.'
-        });
-      }
-
-      res.json({
-        success: true,
-        message:
-          'Dars tugatildi.',
-        lesson:
-          result
-      });
-    } catch (error) {
-      console.error(
-        'Dars yakunlash xatosi:',
-        error
-      );
-
-      res.status(500).json({
-        success: false,
-        message:
-          'Darsni tugatishda xatolik.'
-      });
-    }
-  }
-);
-
-/*
-============================================================
- TELEGRAM TEST
-============================================================
-*/
-
-app.post(
-  '/api/telegram/test',
-  async (req, res) => {
-    if (!bot) {
-      return res.status(503).json({
-        success: false,
-        message:
-          'Telegram bot ulanmagan.'
-      });
-    }
-
-    const {
-      chatId,
-      message
-    } = req.body;
-
-    if (
-      !chatId ||
-      !message
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'chatId va message kerak.'
-      });
-    }
-
-    try {
-      await bot.sendMessage(
-        chatId,
-        message
-      );
-
-      res.json({
-        success: true,
-        message:
-          'Telegram xabari yuborildi.'
-      });
-    } catch (error) {
-      console.error(
-        'Telegram xabari xatosi:',
-        error.message
-      );
-
-      res.status(500).json({
-        success: false,
-        message:
-          'Telegram xabarini yuborib bo‘lmadi.'
-      });
-    }
-  }
-);
-
-/*
-============================================================
- SCHEDULER
-============================================================
-*/
-
-function sendAttendanceWarning(
-  warning
-) {
   if (
-    !bot ||
-    !warning?.directorTelegramId
+    action.startsWith('crud_')
   ) {
+    await handleCrudAction(
+      chatId,
+      user,
+      action
+    );
     return;
   }
 
-  bot.sendMessage(
-    warning.directorTelegramId,
-    warning.message,
-    {
-      reply_markup:
-        teacherKeyboard()
-    }
-  ).catch(error => {
-    console.error(
-      '❌ Telegram ogohlantirish xatosi:',
-      error.message
+  /* HOME */
+
+  if (action === 'home') {
+    await showStart(
+      chatId,
+      user.first_name || 'shaxmatchi',
+      user
     );
-  });
-}
-
-/*
-============================================================
- API 404
-============================================================
-*/
-
-app.use(
-  '/api',
-  (req, res) => {
-    res.status(404).json({
-      success: false,
-      message:
-        'CHESARA API manzili topilmadi.'
-    });
+    return;
   }
-);
 
-/*
-============================================================
- SAYT FALLBACK
-============================================================
-*/
+  /* PASSPORT */
 
-app.use(
-  (req, res, next) => {
-    if (
-      req.path.startsWith(
-        '/telegram/webhook/'
-      )
-    ) {
-      return res
-        .status(404)
-        .send(
-          'Webhook topilmadi.'
-        );
-    }
-
-    res.sendFile(
-      path.join(
-        __dirname,
-        'index.html'
-      ),
-      error => {
-        if (error) {
-          next(error);
-        }
-      }
+  if (action === 'passport_me') {
+    await sendPassport(
+      chatId,
+      user
     );
+    return;
   }
-);
 
-/*
-============================================================
- SERVER
-============================================================
-*/
+  if (action === 'passport_verify') {
+    await requestPassportVerification(
+      chatId,
+      user.id
+    );
+    return;
+  }
 
-const server =
-  app.listen(
-    PORT,
-    '0.0.0.0',
-    async () => {
-      console.log(
-        `🚀 CHESARA server ${PORT}-portda ishlayapti.`
-      );
+  /* ROLE */
 
-      console.log(
-        '♟️ CHESARA AI Chess Platform ishga tushdi.'
-      );
+  if (action === 'role_teacher') {
+    await showRole(
+      chatId,
+      'teacher'
+    );
+    return;
+  }
 
-      console.log(
-        `👑 Super Admin: ${SUPER_ADMIN.telegramId} (@${SUPER_ADMIN.username})`
-      );
+  if (action === 'role_student') {
+    await showRole(
+      chatId,
+      'student'
+    );
+    return;
+  }
 
-      try {
-        startScheduler(
-          sendAttendanceWarning
-        );
+  if (action === 'role_parent') {
+    await showRole(
+      chatId,
+      'parent'
+    );
+    return;
+  }
 
-        console.log(
-          '⏰ CHESARA dars nazorati ishga tushdi.'
-        );
-      } catch (error) {
-        console.error(
-          '⚠️ Scheduler ishga tushmadi:',
-          error.message
-        );
-      }
+  /* TEACHER */
 
-      await setupTelegram();
-    }
-  );
+  if (action === 'teacher_independent') {
 
-/*
-============================================================
- TOZA YOPILISH
-============================================================
-*/
-
-async function shutdown(
-  signal
-) {
-  console.log(
-    `🛑 ${signal} qabul qilindi. Server yopilmoqda...`
-  );
-
-  try {
-    if (bot) {
-      await bot
-        .deleteWebHook({
-          drop_pending_updates:
-            false
-        })
-        .catch(() => {});
-    }
-
-    server.close(() => {
-      console.log(
-        '✅ CHESARA server toza yopildi.'
-      );
-
-      process.exit(0);
-    });
-  } catch (error) {
-    console.error(
-      '❌ Yopilish xatosi:',
-      error.message
+    await bot.sendMessage(
+      chatId,
+      [
+        '🌐 MUSTAQIL / SHAXSIY KURS',
+        '',
+        'Siz markazsiz mustaqil ustoz',
+        'sifatida ishlashingiz mumkin.',
+        '',
+        '📚 Kurslar',
+        '📋 Guruhlar',
+        '👨‍🎓 O‘quvchilar',
+        '📅 Darslar',
+        '📊 Hisobotlar',
+        '',
+        'hammasi CHESARA orqali boshqariladi.'
+      ].join('\n'),
+      teacherMenu
     );
 
-    process.exit(1);
+    return;
+  }
+
+  if (action === 'teacher_join_center') {
+
+    await bot.sendMessage(
+      chatId,
+      [
+        '🏢 MARKAZGA QO‘SHILISH',
+        '',
+        '⚠️ Muhim:',
+        'Ustoz markaz qidirmaydi.',
+        '',
+        'Markaz direktori ustozni',
+        'CHESARA ID orqali topib,',
+        'markaziga qo‘shadi.',
+        '',
+        'Sizning CHESARA ID:',
+        `CH-${user.id}`,
+        '',
+        'Direktorga shu IDni berishingiz mumkin.'
+      ].join('\n'),
+      teacherMenu
+    );
+
+    return;
   }
 }
 
-process.once(
-  'SIGTERM',
-  () =>
-    shutdown('SIGTERM')
+/* =========================================================
+   MESSAGE LISTENER
+========================================================= */
+
+bot.on(
+  'message',
+  async msg => {
+
+    try {
+
+      if (msg.text) {
+        await handleText(msg);
+      }
+
+    } catch (error) {
+
+      console.error(
+        '❌ Telegram message xatosi:',
+        error.message
+      );
+
+    }
+  }
 );
 
-process.once(
-  'SIGINT',
-  () =>
-    shutdown('SIGINT')
+/* =========================================================
+   CALLBACK LISTENER
+========================================================= */
+
+bot.on(
+  'callback_query',
+  async query => {
+
+    try {
+
+      await handleCallback(query);
+
+    } catch (error) {
+
+      console.error(
+        '❌ Telegram callback xatosi:',
+        error.message
+      );
+
+    }
+  }
 );
 
-/*
-============================================================
- GLOBAL ERROR
-============================================================
-*/
+/* =========================================================
+   POLLING ERROR
+========================================================= */
 
-process.on(
-  'uncaughtException',
+bot.on(
+  'polling_error',
   error => {
     console.error(
-      '❌ Uncaught Exception:',
-      error
+      '❌ Telegram polling xatosi:',
+      error.message
     );
   }
 );
 
-process.on(
-  'unhandledRejection',
-  error => {
-    console.error(
-      '❌ Unhandled Rejection:',
-      error
-    );
-  }
-);
+/* =========================================================
+   EXPORT
+========================================================= */
+
+module.exports = {
+  bot,
+  SUPER_ADMIN,
+
+  mainMenu,
+  superAdminMenu,
+  teacherMenu,
+  studentMenu,
+  parentMenu,
+
+  roleMenu,
+  teacherTypeMenu,
+  passportMenu,
+
+  isSuperAdmin,
+  showStart,
+  showSuperAdmin,
+  showRole,
+
+  handleText,
+  handleCallback
+};
