@@ -1,13 +1,15 @@
+# subscription.js
+
 ```javascript
-'use strict'
+'use strict';
 
 const CHANNEL_USERNAME = '@uzchesara';
 
-async function isSubscribed(bot, telegramId) {
+async function isSubscribed(bot, chatId) {
   try {
     const member = await bot.getChatMember(
       CHANNEL_USERNAME,
-      telegramId
+      chatId
     );
 
     return [
@@ -15,7 +17,6 @@ async function isSubscribed(bot, telegramId) {
       'administrator',
       'member'
     ].includes(member.status);
-
   } catch (error) {
     console.error(
       '❌ Kanal obunasini tekshirish xatosi:',
@@ -26,9 +27,7 @@ async function isSubscribed(bot, telegramId) {
   }
 }
 
-async function requireSubscription(bot, msg) {
-  const chatId = msg.chat.id;
-
+async function requireSubscription(bot, chatId) {
   const subscribed = await isSubscribed(
     bot,
     chatId
@@ -40,14 +39,18 @@ async function requireSubscription(bot, msg) {
 
   await bot.sendMessage(
     chatId,
-    `♟️ CHESARA
-
-CHESARA'dan foydalanish uchun avval
-rasmiy kanalimizga obuna bo‘ling.
-
-📢 @uzchesara
-
-Obuna bo‘lgach, quyidagi tugmani bosing:`,
+    [
+      '♟️ CHESARA',
+      '',
+      '⚠️ Botdan foydalanish uchun',
+      '@uzchesara kanaliga obuna bo‘lishingiz kerak.',
+      '',
+      'Kanalga obuna bo‘lmasangiz yoki',
+      'undan chiqib ketsangiz, CHESARA',
+      'xizmatlaridan foydalanishingiz cheklanishi mumkin.',
+      '',
+      'Obuna bo‘lgach, quyidagi tugmani bosing.'
+    ].join('\n'),
     {
       reply_markup: {
         inline_keyboard: [
