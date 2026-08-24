@@ -1,829 +1,1342 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+const TelegramBot = require('node-telegram-bot-api');
 
-const DATA_DIR = path.join(__dirname, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'access.json');
+const token = process.env.TELEGRAM_BOT_TOKEN;
 
-// Oddiy foydalanuvchi rolini almashtirish oralig‘i.
-// Hozircha 30 kun.
-// Keyinchalik Super Admin panelidan o‘zgartiramiz.
-const ROLE_CHANGE_COOLDOWN_DAYS = 30;
+if (!token) {
+  console.error('❌ TELEGRAM_BOT_TOKEN topilmadi!');
+  module.exports = null;
+  return;
+}
+
+/*
+============================================================
+ CHESARA TELEGRAM BOT
+============================================================
+
+MUHIM:
+Bot polling qilmaydi.
+
+Telegram webhook server.js orqali boshqariladi.
+Shuning uchun bu faylda polling = true ishlatilmaydi.
+*/
+
+const bot = new TelegramBot(token, {
+  polling: false
+});
+
+console.log('🤖 CHESARA Telegram bot moduli tayyor.');
+
+/*
+============================================================
+ SUPER ADMIN
+============================================================
+*/
 
 const SUPER_ADMIN = {
-  telegramId: '1148401454',
-  username: 'jovliyev_bekzod',
-  role: 'super_admin'
+  telegramId: 1148401454,
+  username: 'jovliyev_bekzod'
 };
 
-const DEFAULT_DATA = {
-  users: {},
-  centers: {},
-  centerJoinRequests: {},
-  roleChangeLogs: [],
-  permissions: {},
-  botSettings: {
-    requiredChannel: '@uzchesara',
-    subscriptionRequired: true
+/*
+============================================================
+ UMUMIY MENYU
+============================================================
+*/
+
+const mainMenu = {
+  reply_markup: {
+    keyboard: [
+      ['👨‍🏫 Ustoz kabineti'],
+      ['👨‍🎓 O‘quvchi kabineti'],
+      ['📅 Davomat', '📊 Hisobotlar'],
+      ['🧠 O‘yin tahlili', '🏆 Turnirlar'],
+      ['📰 Yangiliklar', '🔔 Ogohlantirishlar'],
+      ['⚙️ Profil'],
+      ['🔄 Rolni o‘zgartirish']
+    ],
+    resize_keyboard: true,
+    is_persistent: true
   }
 };
 
-function ensureStorage() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+/*
+============================================================
+ SUPER ADMIN MENYU
+============================================================
+*/
+
+const superAdminMenu = {
+  reply_markup: {
+    keyboard: [
+      ['👑 Super Admin'],
+      ['👥 Foydalanuvchilar'],
+      ['🏢 Markazlar'],
+      ['📚 Kurslar'],
+      ['📋 Guruhlar'],
+      ['🧩 Menyular'],
+      ['✏️ Matnlar'],
+      ['📢 Kanal / Obuna'],
+      ['⚙️ Tizim sozlamalari'],
+      ['🏠 Bosh menyu']
+    ],
+    resize_keyboard: true,
+    is_persistent: true
   }
+};
 
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(
-      DATA_FILE,
-      JSON.stringify(DEFAULT_DATA, null, 2),
-      'utf8'
-    );
+/*
+============================================================
+ USTOZ MENYU
+============================================================
+*/
+
+const teacherMenu = {
+  reply_markup: {
+    keyboard: [
+      ['👨‍🎓 O‘quvchilar'],
+      ['📚 Darslar'],
+      ['📅 Davomat'],
+      ['📊 Hisobotlar'],
+      ['🏢 Markaz / Shaxsiy kurs'],
+      ['🧩 Tizim qurish'],
+      ['⚙️ Profil'],
+      ['🔄 Rolni o‘zgartirish'],
+      ['🏠 Bosh menyu']
+    ],
+    resize_keyboard: true,
+    is_persistent: true
   }
-}
+};
 
-function readData() {
-  ensureStorage();
+/*
+============================================================
+ O‘QUVCHI MENYU
+============================================================
+*/
 
-  try {
-    const raw = fs.readFileSync(DATA_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-
-    return {
-      ...DEFAULT_DATA,
-      ...parsed,
-      users: parsed.users || {},
-      centers: parsed.centers || {},
-      centerJoinRequests: parsed.centerJoinRequests || {},
-      roleChangeLogs: parsed.roleChangeLogs || [],
-      permissions: parsed.permissions || {},
-      botSettings: {
-        ...DEFAULT_DATA.botSettings,
-        ...(parsed.botSettings || {})
-      }
-    };
-  } catch (error) {
-    console.error('❌ access.json o‘qilmadi:', error.message);
-
-    return JSON.parse(JSON.stringify(DEFAULT_DATA));
+const studentMenu = {
+  reply_markup: {
+    keyboard: [
+      ['📚 Darslarim'],
+      ['📅 Davomatim'],
+      ['🧠 O‘yin tahlili'],
+      ['🏆 Turnirlar'],
+      ['📈 Rivojlanishim'],
+      ['⚙️ Profil'],
+      ['🔄 Rolni o‘zgartirish'],
+      ['🏠 Bosh menyu']
+    ],
+    resize_keyboard: true,
+    is_persistent: true
   }
-}
+};
 
-function writeData(data) {
-  ensureStorage();
+/*
+============================================================
+ OTA-ONA MENYU
+============================================================
+*/
 
-  const tempFile = `${DATA_FILE}.tmp`;
-
-  fs.writeFileSync(
-    tempFile,
-    JSON.stringify(data, null, 2),
-    'utf8'
-  );
-
-  fs.renameSync(tempFile, DATA_FILE);
-}
-
-function normalizeTelegramId(value) {
-  return String(value || '').trim();
-}
-
-function normalizeUsername(value) {
-  return String(value || '')
-    .trim()
-    .replace(/^@/, '')
-    .toLowerCase();
-}
-
-function isSuperAdmin(userOrTelegramId) {
-  if (
-    userOrTelegramId &&
-    typeof userOrTelegramId === 'object'
-  ) {
-    const telegramId = normalizeTelegramId(
-      userOrTelegramId.telegramId ||
-      userOrTelegramId.id
-    );
-
-    const username = normalizeUsername(
-      userOrTelegramId.username
-    );
-
-    return (
-      telegramId === SUPER_ADMIN.telegramId ||
-      username === SUPER_ADMIN.username
-    );
+const parentMenu = {
+  reply_markup: {
+    keyboard: [
+      ['👨‍👩‍👧 Farzandlarim'],
+      ['📊 Natijalar'],
+      ['📅 Davomat'],
+      ['🔔 Ogohlantirishlar'],
+      ['⚙️ Profil'],
+      ['🔄 Rolni o‘zgartirish'],
+      ['🏠 Bosh menyu']
+    ],
+    resize_keyboard: true,
+    is_persistent: true
   }
+};
 
-  return (
-    normalizeTelegramId(userOrTelegramId) ===
-    SUPER_ADMIN.telegramId
-  );
-}
+/*
+============================================================
+ ORQAGA
+============================================================
+*/
 
-function defaultPermissions() {
-  return {
-    users: true,
-    teachers: true,
-    students: true,
-    parents: true,
-    centers: true,
-    courses: true,
-    groups: true,
-    lessons: true,
-    attendance: true,
-    reports: true,
-    tournaments: true,
-    analysis: true,
-    menus: true,
-    menuTexts: true,
-    botTexts: true,
-    subscription: true,
-    channels: true,
-    settings: true
-  };
-}
-
-function ensureSuperAdmin(data) {
-  const key = SUPER_ADMIN.telegramId;
-
-  if (!data.users[key]) {
-    data.users[key] = {
-      telegramId: key,
-      username: SUPER_ADMIN.username,
-      firstName: 'Bekzod',
-      role: SUPER_ADMIN.role,
-      roleSelectedAt: new Date().toISOString(),
-      roleLastChangedAt: null,
-      centerId: null,
-      teacherType: null,
-      status: 'active',
-      createdAt: new Date().toISOString()
-    };
-  } else {
-    data.users[key].username =
-      SUPER_ADMIN.username;
-
-    data.users[key].role =
-      SUPER_ADMIN.role;
-
-    data.users[key].status =
-      'active';
+const backMenu = {
+  reply_markup: {
+    keyboard: [
+      ['🏠 Bosh menyu']
+    ],
+    resize_keyboard: true
   }
-
-  data.permissions[key] =
-    defaultPermissions();
-}
-
-function getUser(telegramId) {
-  const data = readData();
-
-  ensureSuperAdmin(data);
-  writeData(data);
-
-  return (
-    data.users[
-      normalizeTelegramId(telegramId)
-    ] || null
-  );
-}
-
-function getOrCreateUser({
-  telegramId,
-  username,
-  firstName,
-  lastName
-}) {
-  const id = normalizeTelegramId(telegramId);
-
-  if (!id) {
-    throw new Error(
-      'Telegram ID mavjud emas.'
-    );
-  }
-
-  const data = readData();
-
-  ensureSuperAdmin(data);
-
-  if (!data.users[id]) {
-    data.users[id] = {
-      telegramId: id,
-      username:
-        normalizeUsername(username) || null,
-      firstName:
-        firstName || '',
-      lastName:
-        lastName || '',
-      role: null,
-      roleSelectedAt: null,
-      roleLastChangedAt: null,
-      centerId: null,
-      teacherType: null,
-      status: 'active',
-      createdAt: new Date().toISOString()
-    };
-  } else {
-    data.users[id].username =
-      normalizeUsername(username) ||
-      data.users[id].username ||
-      null;
-
-    if (firstName) {
-      data.users[id].firstName =
-        firstName;
-    }
-
-    if (lastName) {
-      data.users[id].lastName =
-        lastName;
-    }
-  }
-
-  if (id === SUPER_ADMIN.telegramId) {
-    data.users[id].role =
-      SUPER_ADMIN.role;
-
-    data.users[id].username =
-      SUPER_ADMIN.username;
-  }
-
-  writeData(data);
-
-  return data.users[id];
-}
-
-function setRole(
-  telegramId,
-  role,
-  extra = {}
-) {
-  const id = normalizeTelegramId(telegramId);
-
-  const allowedRoles = [
-    'parent',
-    'student',
-    'teacher'
-  ];
-
-  if (!allowedRoles.includes(role)) {
-    throw new Error(
-      'Noto‘g‘ri rol.'
-    );
-  }
-
-  const data = readData();
-
-  ensureSuperAdmin(data);
-
-  if (!data.users[id]) {
-    data.users[id] = {
-      telegramId: id,
-      username: null,
-      firstName: '',
-      lastName: '',
-      role: null,
-      roleSelectedAt: null,
-      roleLastChangedAt: null,
-      centerId: null,
-      teacherType: null,
-      status: 'active',
-      createdAt: new Date().toISOString()
-    };
-  }
-
-  const user = data.users[id];
-
-  // Super Admin uchun cheklov yo‘q.
-  if (isSuperAdmin(id)) {
-    user.role = SUPER_ADMIN.role;
-    user.roleSelectedAt =
-      user.roleSelectedAt ||
-      new Date().toISOString();
-
-    writeData(data);
-
-    return {
-      success: true,
-      user,
-      isSuperAdmin: true
-    };
-  }
-
-  // Birinchi rol tanlanishi.
-  if (!user.role) {
-    user.role = role;
-    user.roleSelectedAt =
-      new Date().toISOString();
-
-    if (extra.teacherType) {
-      user.teacherType =
-        extra.teacherType;
-    }
-
-    if (extra.centerId) {
-      user.centerId =
-        extra.centerId;
-    }
-
-    writeData(data);
-
-    return {
-      success: true,
-      firstSelection: true,
-      user
-    };
-  }
-
-  // Eski rol bilan bir xil bo‘lsa.
-  if (user.role === role) {
-    return {
-      success: false,
-      reason: 'same_role',
-      message:
-        'Siz allaqachon shu roldasiz.',
-      user
-    };
-  }
-
-  return canChangeRole(id)
-    ? changeExistingRole(
-        id,
-        role,
-        extra
-      )
-    : {
-        success: false,
-        reason: 'cooldown',
-        message:
-          getRoleChangeMessage(user),
-        user
-      };
-}
-
-function canChangeRole(telegramId) {
-  const id =
-    normalizeTelegramId(telegramId);
-
-  if (isSuperAdmin(id)) {
-    return true;
-  }
-
-  const data = readData();
-  const user = data.users[id];
-
-  if (!user || !user.role) {
-    return true;
-  }
-
-  if (!user.roleLastChangedAt) {
-    // Birinchi rol tanlangan bo‘lsa,
-    // undan keyin cooldown boshlanadi.
-    if (!user.roleSelectedAt) {
-      return true;
-    }
-
-    const elapsed =
-      Date.now() -
-      new Date(
-        user.roleSelectedAt
-      ).getTime();
-
-    const cooldown =
-      ROLE_CHANGE_COOLDOWN_DAYS *
-      24 *
-      60 *
-      60 *
-      1000;
-
-    return elapsed >= cooldown;
-  }
-
-  const elapsed =
-    Date.now() -
-    new Date(
-      user.roleLastChangedAt
-    ).getTime();
-
-  const cooldown =
-    ROLE_CHANGE_COOLDOWN_DAYS *
-    24 *
-    60 *
-    60 *
-    1000;
-
-  return elapsed >= cooldown;
-}
-
-function getNextRoleChangeDate(user) {
-  const baseDate =
-    user.roleLastChangedAt ||
-    user.roleSelectedAt;
-
-  if (!baseDate) {
-    return null;
-  }
-
-  const date =
-    new Date(baseDate);
-
-  date.setDate(
-    date.getDate() +
-    ROLE_CHANGE_COOLDOWN_DAYS
-  );
-
-  return date;
-}
-
-function getRoleChangeMessage(user) {
-  const nextDate =
-    getNextRoleChangeDate(user);
-
-  if (!nextDate) {
-    return 'Rolni hozir almashtirish mumkin.';
-  }
-
-  return [
-    '🔒 Rolni hozircha almashtirib bo‘lmaydi.',
-    '',
-    `📅 Keyingi almashtirish: ${nextDate.toLocaleDateString('uz-UZ')}`,
-    '',
-    'Agar rolni hozir almashtirish zarur bo‘lsa,',
-    'Super Admin bilan bog‘laning.'
-  ].join('\n');
-}
-
-function changeExistingRole(
-  telegramId,
-  newRole,
-  extra = {}
-) {
-  const data = readData();
-
-  const user =
-    data.users[
-      normalizeTelegramId(telegramId)
-    ];
-
-  if (!user) {
-    return {
-      success: false,
-      reason: 'not_found',
-      message:
-        'Foydalanuvchi topilmadi.'
-    };
-  }
-
-  const oldRole =
-    user.role;
-
-  user.role =
-    newRole;
-
-  user.roleLastChangedAt =
-    new Date().toISOString();
-
-  if (extra.teacherType !== undefined) {
-    user.teacherType =
-      extra.teacherType;
-  }
-
-  if (extra.centerId !== undefined) {
-    user.centerId =
-      extra.centerId;
-  }
-
-  data.roleChangeLogs.push({
-    id: crypto.randomUUID(),
-    telegramId:
-      user.telegramId,
-    oldRole,
-    newRole,
-    changedAt:
-      new Date().toISOString(),
-    changedBy:
-      isSuperAdmin(telegramId)
-        ? SUPER_ADMIN.telegramId
-        : user.telegramId
-  });
-
-  writeData(data);
-
-  return {
-    success: true,
-    firstSelection: false,
-    user
-  };
-}
-
-function getRole(telegramId) {
-  const user =
-    getUser(telegramId);
-
-  return user?.role || null;
-}
-
-function getPermissions(telegramId) {
-  const data = readData();
-
-  if (isSuperAdmin(telegramId)) {
-    return defaultPermissions();
-  }
-
-  return (
-    data.permissions[
-      normalizeTelegramId(telegramId)
-    ] || {}
-  );
-}
-
-function hasPermission(
-  telegramId,
-  permission
-) {
-  if (isSuperAdmin(telegramId)) {
-    return true;
-  }
-
-  const permissions =
-    getPermissions(telegramId);
-
-  return permissions[permission] === true;
-}
-
-function createCenter({
-  name,
-  ownerTelegramId,
-  description = ''
-}) {
-  if (!name) {
-    throw new Error(
-      'Markaz nomi kerak.'
-    );
-  }
-
-  const data = readData();
-
-  const id =
-    crypto.randomUUID();
-
-  data.centers[id] = {
-    id,
-    name: String(name).trim(),
-    description,
-    ownerTelegramId:
-      normalizeTelegramId(
-        ownerTelegramId
-      ),
-    status: 'active',
-    createdAt:
-      new Date().toISOString()
-  };
-
-  writeData(data);
-
-  return data.centers[id];
-}
-
-function getCenters() {
-  const data = readData();
-
-  return Object.values(
-    data.centers
-  ).filter(
-    center =>
-      center.status !== 'deleted'
-  );
-}
-
-function getCenter(centerId) {
-  const data = readData();
-
-  return (
-    data.centers[centerId] ||
-    null
-  );
-}
-
-function requestCenterJoin({
-  telegramId,
-  centerId
-}) {
-  const data = readData();
-
-  const userId =
-    normalizeTelegramId(telegramId);
-
-  const center =
-    data.centers[centerId];
-
-  if (!center) {
-    return {
-      success: false,
-      message:
-        'Markaz topilmadi.'
-    };
-  }
-
-  const requestId =
-    crypto.randomUUID();
-
-  data.centerJoinRequests[
-    requestId
-  ] = {
-    id: requestId,
-    telegramId: userId,
-    centerId,
-    status: 'pending',
-    createdAt:
-      new Date().toISOString()
-  };
-
-  writeData(data);
-
-  return {
-    success: true,
-    request:
-      data.centerJoinRequests[
-        requestId
+};
+
+/*
+============================================================
+ ROL TANLASH
+============================================================
+*/
+
+const roleMenu = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        {
+          text: '👨‍🏫 Ustoz',
+          callback_data: 'role_teacher'
+        }
+      ],
+      [
+        {
+          text: '👨‍🎓 O‘quvchi',
+          callback_data: 'role_student'
+        }
+      ],
+      [
+        {
+          text: '👨‍👩‍👧 Ota-ona',
+          callback_data: 'role_parent'
+        }
       ]
-  };
-}
-
-function approveCenterJoin(
-  requestId,
-  approvedBy
-) {
-  const data = readData();
-
-  const request =
-    data.centerJoinRequests[
-      requestId
-    ];
-
-  if (!request) {
-    return {
-      success: false,
-      message:
-        'So‘rov topilmadi.'
-    };
+    ]
   }
+};
 
-  const allowed =
-    isSuperAdmin(approvedBy);
+/*
+============================================================
+ USTOZ FAOLIYAT TURI
+============================================================
+*/
 
-  if (!allowed) {
-    return {
-      success: false,
-      message:
-        'Bu amal uchun ruxsat yo‘q.'
-    };
+const teacherTypeMenu = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        {
+          text: '🏢 Mavjud markazga qo‘shilaman',
+          callback_data: 'teacher_join_center'
+        }
+      ],
+      [
+        {
+          text: '🌐 Mustaqil / shaxsiy kurs',
+          callback_data: 'teacher_independent'
+        }
+      ],
+      [
+        {
+          text: '⬅️ Orqaga',
+          callback_data: 'home'
+        }
+      ]
+    ]
   }
+};
 
-  request.status =
-    'approved';
+/*
+============================================================
+ SUPER ADMINNI ANIQLASH
+============================================================
+*/
 
-  request.approvedBy =
-    normalizeTelegramId(
-      approvedBy
-    );
-
-  request.approvedAt =
-    new Date().toISOString();
-
-  if (data.users[request.telegramId]) {
-    data.users[
-      request.telegramId
-    ].centerId =
-      request.centerId;
+function isSuperAdmin(user) {
+  if (!user) {
+    return false;
   }
-
-  writeData(data);
-
-  return {
-    success: true,
-    request
-  };
-}
-
-function setIndependentTeacher(
-  telegramId
-) {
-  const data = readData();
 
   const id =
-    normalizeTelegramId(
-      telegramId
-    );
+    Number(user.id || user.telegramId);
 
-  if (!data.users[id]) {
-    return {
-      success: false,
-      message:
-        'Foydalanuvchi topilmadi.'
-    };
-  }
+  const username =
+    String(
+      user.username || ''
+    )
+      .replace('@', '')
+      .toLowerCase();
 
-  data.users[id].role =
-    'teacher';
-
-  data.users[id].teacherType =
-    'independent';
-
-  data.users[id].centerId =
-    null;
-
-  writeData(data);
-
-  return {
-    success: true,
-    user:
-      data.users[id]
-  };
-}
-
-function setCenterTeacher(
-  telegramId,
-  centerId
-) {
-  const data = readData();
-
-  const id =
-    normalizeTelegramId(
-      telegramId
-    );
-
-  if (!data.users[id]) {
-    return {
-      success: false,
-      message:
-        'Foydalanuvchi topilmadi.'
-    };
-  }
-
-  if (!data.centers[centerId]) {
-    return {
-      success: false,
-      message:
-        'Markaz topilmadi.'
-    };
-  }
-
-  data.users[id].role =
-    'teacher';
-
-  data.users[id].teacherType =
-    'center';
-
-  data.users[id].centerId =
-    centerId;
-
-  writeData(data);
-
-  return {
-    success: true,
-    user:
-      data.users[id]
-  };
-}
-
-function getAllUsers() {
-  const data = readData();
-
-  return Object.values(
-    data.users
+  return (
+    id === SUPER_ADMIN.telegramId ||
+    username ===
+      SUPER_ADMIN.username.toLowerCase()
   );
 }
+
+/*
+============================================================
+ SUPER ADMIN MENYUSI
+============================================================
+*/
+
+async function showSuperAdmin(chatId) {
+  await bot.sendMessage(
+    chatId,
+    [
+      '👑 CHESARA SUPER ADMIN',
+      '',
+      `ID: ${SUPER_ADMIN.telegramId}`,
+      `Username: @${SUPER_ADMIN.username}`,
+      '',
+      'Sizda CHESARA tizimining',
+      'to‘liq boshqaruv huquqi mavjud.',
+      '',
+      'Siz quyidagilarni boshqarishingiz mumkin:',
+      '',
+      '👥 Foydalanuvchilar',
+      '🏢 Markazlar',
+      '📚 Kurslar',
+      '📋 Guruhlar',
+      '🧩 Menyular',
+      '✏️ Barcha matnlar',
+      '📢 Kanal va guruh obunasi',
+      '⚙️ Tizim sozlamalari'
+    ].join('\n'),
+    superAdminMenu
+  );
+}
+
+/*
+============================================================
+ START MATNI
+============================================================
+*/
+
+async function showStart(chatId, firstName, user) {
+  if (isSuperAdmin(user)) {
+    await showSuperAdmin(chatId);
+    return;
+  }
+
+  await bot.sendMessage(
+    chatId,
+    [
+      `♟️ CHESARA'ga xush kelibsiz, ${firstName}!`,
+      '',
+      '🌍 AI Shaxmat Platformasi',
+      '',
+      'CHESARA orqali:',
+      '',
+      '👨‍🏫 Ustoz',
+      '👨‍🎓 O‘quvchi',
+      '👨‍👩‍👧 Ota-ona',
+      '',
+      'sifatida foydalanishingiz mumkin.',
+      '',
+      'Iltimos, o‘zingizga mos rolni tanlang.'
+    ].join('\n'),
+    roleMenu
+  );
+}
+
+/*
+============================================================
+ ROL MATNLARI
+============================================================
+*/
+
+const roleTexts = {
+
+  teacher: [
+    '👨‍🏫 USTOZ',
+    '',
+    'Ustoz kabinetiga xush kelibsiz.',
+    '',
+    'Siz:',
+    '👥 O‘quvchilar',
+    '📚 Kurslar',
+    '📋 Guruhlar',
+    '📅 Darslar',
+    '✅ Davomat',
+    '📊 Hisobotlar',
+    '🧠 O‘yin tahlili',
+    '',
+    'bilan ishlashingiz mumkin.',
+    '',
+    'Siz mavjud markazga qo‘shilishingiz',
+    'yoki mustaqil / shaxsiy kurs',
+    'sifatida ishlashingiz mumkin.'
+  ].join('\n'),
+
+  student: [
+    '👨‍🎓 O‘QUVCHI',
+    '',
+    'O‘quvchi kabinetiga xush kelibsiz.',
+    '',
+    'Siz:',
+    '📚 Darslaringiz',
+    '📅 Davomatingiz',
+    '🧠 O‘yin tahlili',
+    '🏆 Turnirlar',
+    '📈 Rivojlanishingiz',
+    '',
+    'bo‘yicha ma’lumot olishingiz mumkin.'
+  ].join('\n'),
+
+  parent: [
+    '👨‍👩‍👧 OTA-ONA',
+    '',
+    'Ota-ona kabinetiga xush kelibsiz.',
+    '',
+    'Bu yerda farzandingizning:',
+    '📚 Darslari',
+    '📅 Davomati',
+    '📊 Natijalari',
+    '📈 Rivojlanishi',
+    '',
+    'ko‘rsatiladi.'
+  ].join('\n')
+};
+
+/*
+============================================================
+ ROL TANLANGANDA
+============================================================
+*/
+
+async function showRole(chatId, role) {
+
+  if (role === 'teacher') {
+
+    await bot.sendMessage(
+      chatId,
+      roleTexts.teacher,
+      teacherMenu
+    );
+
+    await bot.sendMessage(
+      chatId,
+      [
+        '👨‍🏫 FAOLIYAT TURINI TANLANG',
+        '',
+        '🏢 Mavjud o‘quv markaziga qo‘shilishingiz mumkin.',
+        '',
+        '🌐 Yoki hech qanday markazsiz',
+        'mustaqil / shaxsiy kurs sifatida',
+        'dars berishingiz mumkin.'
+      ].join('\n'),
+      teacherTypeMenu
+    );
+
+    return;
+  }
+
+  if (role === 'student') {
+    await bot.sendMessage(
+      chatId,
+      roleTexts.student,
+      studentMenu
+    );
+
+    return;
+  }
+
+  if (role === 'parent') {
+    await bot.sendMessage(
+      chatId,
+      roleTexts.parent,
+      parentMenu
+    );
+
+    return;
+  }
+}
+
+/*
+============================================================
+ ODDIY BO‘LIMLAR
+============================================================
+*/
+
+async function sendTeacherCabinet(chatId) {
+
+  await bot.sendMessage(
+    chatId,
+    [
+      '👨‍🏫 USTOZ KABINETI',
+      '',
+      'Bu bo‘lim orqali ustoz:',
+      '',
+      '👥 Guruhlarini ko‘radi',
+      '📅 Dars jadvalini boshqaradi',
+      '✅ Davomat qiladi',
+      '📊 O‘quvchilar natijasini ko‘radi',
+      '💰 To‘lovlarni nazorat qiladi',
+      '🧠 O‘yinlarni tahlil qiladi',
+      '📈 Hisobot oladi',
+      '',
+      '⏰ Dars boshlanganidan 15 daqiqa',
+      'ichida davomat qilinmasa,',
+      'CHESARA avtomatik ogohlantiradi.'
+    ].join('\n'),
+    teacherMenu
+  );
+}
+
+async function sendStudentCabinet(chatId) {
+
+  await bot.sendMessage(
+    chatId,
+    [
+      '👨‍🎓 O‘QUVCHI KABINETI',
+      '',
+      'O‘quvchi:',
+      '',
+      '📅 Davomatini',
+      '📚 Guruhini',
+      '🧠 O‘yinlarini',
+      '📈 Rivojlanishini',
+      '🏆 Turnirlarini',
+      '',
+      'ko‘rishi mumkin.'
+    ].join('\n'),
+    studentMenu
+  );
+}
+
+async function sendAttendance(chatId) {
+
+  await bot.sendMessage(
+    chatId,
+    [
+      '📅 DAVOMAT',
+      '',
+      'Bugungi dars:',
+      '',
+      '✅ Keldi',
+      '❌ Kelmagan',
+      '⏰ Kechikdi',
+      '',
+      'Ustoz davomatni belgilaydi.',
+      '',
+      '⚠️ Davomat 15 daqiqa ichida',
+      'qilinmasa direktor ogohlantiriladi.'
+    ].join('\n'),
+    backMenu
+  );
+}
+
+async function sendReports(chatId) {
+
+  await bot.sendMessage(
+    chatId,
+    [
+      '📊 HISOBOTLAR',
+      '',
+      'CHESARA:',
+      '',
+      '📅 Kunlik',
+      '📆 Haftalik',
+      '🗓️ Oylik',
+      '',
+      'hisobotlarni tayyorlaydi.',
+      '',
+      'Hisobotda:',
+      '✅ Davomat',
+      '📚 Darslar',
+      '🧠 O‘yinlar',
+      '📈 Rivojlanish',
+      '🏆 Turnirlar'
+    ].join('\n'),
+    backMenu
+  );
+}
+
+async function sendAnalysis(chatId) {
+
+  await bot.sendMessage(
+    chatId,
+    [
+      '🧠 AI O‘YIN TAHLILI',
+      '',
+      'CHESARA o‘quvchi o‘yinlarini:',
+      '',
+      '♟️ Lichess',
+      '♟️ Chess.com',
+      '📸 Screenshot',
+      '',
+      'orqali tahlil qilish tizimini qo‘llab-quvvatlaydi.',
+      '',
+      'Tahlilda:',
+      '❓ Blunder',
+      '❗ Xato',
+      '‼️ Kuchli yurish',
+      '⭐ Juda kuchli yurish',
+      '🎯 Eng yaxshi yurish',
+      '',
+      'aniqlanadi.'
+    ].join('\n'),
+    backMenu
+  );
+}
+
+async function sendTournaments(chatId) {
+
+  await bot.sendMessage(
+    chatId,
+    [
+      '🏆 TURNIRLAR',
+      '',
+      'CHESARA:',
+      '',
+      '🏆 Turnirlarni kuzatadi',
+      '📅 Sanalarni ko‘rsatadi',
+      '🥇 G‘oliblarni chiqaradi',
+      '📊 Natijalarni jamlaydi',
+      '📈 O‘quvchi natijasini kuzatadi.'
+    ].join('\n'),
+    backMenu
+  );
+}
+
+async function sendNews(chatId) {
+
+  await bot.sendMessage(
+    chatId,
+    [
+      '📰 CHESARA YANGILIKLARI',
+      '',
+      'Bu bo‘limda:',
+      '',
+      '🏆 Turnirlar',
+      '🥇 G‘oliblar',
+      '📊 Natijalar',
+      '🎥 Strimlar',
+      '♟️ Shaxmat yangiliklari'
+    ].join('\n'),
+    backMenu
+  );
+}
+
+async function sendNotifications(chatId) {
+
+  await bot.sendMessage(
+    chatId,
+    [
+      '🔔 OGOHLANTIRISHLAR',
+      '',
+      'CHESARA avtomatik nazorat qiladi:',
+      '',
+      '⏰ Davomat qilinmagan',
+      '👨‍🎓 O‘quvchi kelmagan',
+      '📅 Dars o‘tkazilmagan',
+      '💰 To‘lov kechikkan',
+      '📈 Faollik pasaygan',
+      '',
+      'Muhim holatda tegishli ustoz',
+      'yoki direktorga xabar yuboriladi.'
+    ].join('\n'),
+    backMenu
+  );
+}
+
+/*
+============================================================
+ SUPER ADMIN BO‘LIMLARI
+============================================================
+*/
+
+async function adminSection(chatId, title, body) {
+
+  await bot.sendMessage(
+    chatId,
+    [
+      title,
+      '',
+      body,
+      '',
+      '🔧 Bu modul Super Admin uchun',
+      'keyingi bosqichlarda to‘liq funksional qilinadi.'
+    ].join('\n'),
+    superAdminMenu
+  );
+}
+
+/*
+============================================================
+ TEXT HANDLER
+============================================================
+*/
+
+async function handleText(msg) {
+
+  if (!msg || !msg.text) {
+    return;
+  }
+
+  const chatId =
+    msg.chat.id;
+
+  const text =
+    msg.text.trim();
+
+  const user =
+    msg.from || {};
+
+  /*
+  /start
+  */
+
+  if (
+    text === '/start'
+  ) {
+    await showStart(
+      chatId,
+      user.first_name ||
+        'shaxmatchi',
+      user
+    );
+
+    return;
+  }
+
+  /*
+  /admin
+  */
+
+  if (
+    text === '/admin'
+  ) {
+
+    if (
+      isSuperAdmin(user)
+    ) {
+      await showSuperAdmin(
+        chatId
+      );
+    } else {
+      await bot.sendMessage(
+        chatId,
+        '❌ Sizda Super Admin huquqi yo‘q.',
+        backMenu
+      );
+    }
+
+    return;
+  }
+
+  /*
+  /rol
+  */
+
+  if (
+    text === '/rol' ||
+    text === '🔄 Rolni o‘zgartirish'
+  ) {
+
+    if (
+      isSuperAdmin(user)
+    ) {
+
+      await bot.sendMessage(
+        chatId,
+        [
+          '👑 SUPER ADMIN',
+          '',
+          'Siz tizimning barcha qismlarini',
+          'boshqarishingiz mumkin.',
+          '',
+          'Oddiy rol tanlash kerak bo‘lsa:'
+        ].join('\n'),
+        roleMenu
+      );
+
+      return;
+    }
+
+    await bot.sendMessage(
+      chatId,
+      [
+        '🔄 ROLNI O‘ZGARTIRISH',
+        '',
+        'Yangi rolni tanlang:'
+      ].join('\n'),
+      roleMenu
+    );
+
+    return;
+  }
+
+  /*
+  SUPER ADMIN MENYU
+  */
+
+  if (
+    isSuperAdmin(user)
+  ) {
+
+    if (
+      text === '👑 Super Admin'
+    ) {
+      await showSuperAdmin(chatId);
+      return;
+    }
+
+    if (
+      text === '👥 Foydalanuvchilar'
+    ) {
+      await adminSection(
+        chatId,
+        '👥 FOYDALANUVCHILAR',
+        'Barcha foydalanuvchilarni boshqarish paneli.'
+      );
+      return;
+    }
+
+    if (
+      text === '🏢 Markazlar'
+    ) {
+      await adminSection(
+        chatId,
+        '🏢 MARKAZLAR',
+        'O‘quv markazlarini yaratish, tasdiqlash va boshqarish.'
+      );
+      return;
+    }
+
+    if (
+      text === '📚 Kurslar'
+    ) {
+      await adminSection(
+        chatId,
+        '📚 KURSLAR',
+        'Kurslar va metodikalarni boshqarish.'
+      );
+      return;
+    }
+
+    if (
+      text === '📋 Guruhlar'
+    ) {
+      await adminSection(
+        chatId,
+        '📋 GURUHLAR',
+        'Guruhlar va ularning ustoz/o‘quvchilarini boshqarish.'
+      );
+      return;
+    }
+
+    if (
+      text === '🧩 Menyular'
+    ) {
+      await adminSection(
+        chatId,
+        '🧩 MENYULAR',
+        'Telegram va sayt menyularini boshqarish.'
+      );
+      return;
+    }
+
+    if (
+      text === '✏️ Matnlar'
+    ) {
+      await adminSection(
+        chatId,
+        '✏️ MATNLAR',
+        'Barcha menyu va tugmalardagi matnlarni boshqarish.'
+      );
+      return;
+    }
+
+    if (
+      text === '📢 Kanal / Obuna'
+    ) {
+      await adminSection(
+        chatId,
+        '📢 KANAL / OBUNA',
+        'Kanal, guruh va obuna talablarini boshqarish.'
+      );
+      return;
+    }
+
+    if (
+      text === '⚙️ Tizim sozlamalari'
+    ) {
+      await adminSection(
+        chatId,
+        '⚙️ TIZIM SOZLAMALARI',
+        'CHESARA tizimining barcha umumiy sozlamalari.'
+      );
+      return;
+    }
+  }
+
+  /*
+  ODDIY MENYU
+  */
+
+  if (
+    text === '🏠 Bosh menyu'
+  ) {
+
+    await showStart(
+      chatId,
+      user.first_name ||
+        'shaxmatchi',
+      user
+    );
+
+    return;
+  }
+
+  if (
+    text === '👨‍🏫 Ustoz kabineti'
+  ) {
+    await sendTeacherCabinet(
+      chatId
+    );
+    return;
+  }
+
+  if (
+    text === '👨‍🎓 O‘quvchi kabineti'
+  ) {
+    await sendStudentCabinet(
+      chatId
+    );
+    return;
+  }
+
+  if (
+    text === '📅 Davomat'
+  ) {
+    await sendAttendance(
+      chatId
+    );
+    return;
+  }
+
+  if (
+    text === '📊 Hisobotlar'
+  ) {
+    await sendReports(
+      chatId
+    );
+    return;
+  }
+
+  if (
+    text === '🧠 O‘yin tahlili'
+  ) {
+    await sendAnalysis(
+      chatId
+    );
+    return;
+  }
+
+  if (
+    text === '🏆 Turnirlar'
+  ) {
+    await sendTournaments(
+      chatId
+    );
+    return;
+  }
+
+  if (
+    text === '📰 Yangiliklar'
+  ) {
+    await sendNews(
+      chatId
+    );
+    return;
+  }
+
+  if (
+    text === '🔔 Ogohlantirishlar'
+  ) {
+    await sendNotifications(
+      chatId
+    );
+    return;
+  }
+
+  /*
+  USTOZ
+  */
+
+  if (
+    text === '👨‍🎓 O‘quvchilar'
+  ) {
+    await bot.sendMessage(
+      chatId,
+      [
+        '👨‍🎓 O‘QUVCHILAR',
+        '',
+        'Ustozning o‘quvchilari shu yerda ko‘rsatiladi.',
+        '',
+        '🔧 To‘liq CRM moduli keyingi bosqichda ulanadi.'
+      ].join('\n'),
+      teacherMenu
+    );
+
+    return;
+  }
+
+  if (
+    text === '📚 Darslar'
+  ) {
+    await bot.sendMessage(
+      chatId,
+      [
+        '📚 DARSLAR',
+        '',
+        'Ustozning dars jadvali shu yerda boshqariladi.'
+      ].join('\n'),
+      teacherMenu
+    );
+
+    return;
+  }
+
+  if (
+    text === '🏢 Markaz / Shaxsiy kurs'
+  ) {
+
+    await bot.sendMessage(
+      chatId,
+      [
+        '🏢 / 🌐 FAOLIYAT TURI',
+        '',
+        'Qaysi shaklda ishlamoqchisiz?'
+      ].join('\n'),
+      teacherTypeMenu
+    );
+
+    return;
+  }
+
+  if (
+    text === '🧩 Tizim qurish'
+  ) {
+
+    await bot.sendMessage(
+      chatId,
+      [
+        '🧩 TIZIM QURISH',
+        '',
+        'Ustoz quyidagilarni yaratishi mumkin:',
+        '',
+        '🏢 Markaz',
+        '📚 Kurs',
+        '📋 Guruh',
+        '👨‍🎓 O‘quvchi',
+        '📅 Dars',
+        '',
+        'Bu modul keyingi bosqichlarda kengaytiriladi.'
+      ].join('\n'),
+      teacherMenu
+    );
+
+    return;
+  }
+
+  if (
+    text === '📈 Rivojlanishim'
+  ) {
+
+    await bot.sendMessage(
+      chatId,
+      [
+        '📈 RIVOJLANISHIM',
+        '',
+        'O‘quvchining:',
+        '',
+        '♟️ Reytingi',
+        '🧠 Tahlillari',
+        '🎯 Kuchli tomonlari',
+        '⚠️ Zaif tomonlari',
+        '📚 O‘qilgan mavzular',
+        '',
+        'shu yerda ko‘rsatiladi.'
+      ].join('\n'),
+      studentMenu
+    );
+
+    return;
+  }
+
+  /*
+  PROFIL
+  */
+
+  if (
+    text === '⚙️ Profil'
+  ) {
+
+    await bot.sendMessage(
+      chatId,
+      [
+        '⚙️ PROFIL',
+        '',
+        `Telegram ID: ${user.id || '-'}`,
+        `Username: ${
+          user.username
+            ? '@' + user.username
+            : '-'
+        }`,
+        `Ism: ${
+          user.first_name || '-'
+        }`
+      ].join('\n'),
+      backMenu
+    );
+
+    return;
+  }
+
+  /*
+  FALLBACK
+  */
+
+  await bot.sendMessage(
+    chatId,
+    [
+      '♟️ CHESARA',
+      '',
+      'Iltimos, menyudan kerakli bo‘limni tanlang.',
+      '',
+      'Rolni almashtirish:',
+      '/rol'
+    ].join('\n'),
+    isSuperAdmin(user)
+      ? superAdminMenu
+      : mainMenu
+  );
+}
+
+/*
+============================================================
+ CALLBACK HANDLER
+============================================================
+*/
+
+async function handleCallback(query) {
+
+  const chatId =
+    query.message?.chat?.id;
+
+  const action =
+    query.data;
+
+  const user =
+    query.from || {};
+
+  if (!chatId) {
+    return;
+  }
+
+  await bot
+    .answerCallbackQuery(
+      query.id
+    )
+    .catch(() => {});
+
+  /*
+  SUPER ADMIN
+  */
+
+  if (
+    action === 'home'
+  ) {
+    await showStart(
+      chatId,
+      user.first_name ||
+        'shaxmatchi',
+      user
+    );
+
+    return;
+  }
+
+  /*
+  ROL
+  */
+
+  if (
+    action === 'role_teacher'
+  ) {
+
+    await showRole(
+      chatId,
+      'teacher'
+    );
+
+    return;
+  }
+
+  if (
+    action === 'role_student'
+  ) {
+
+    await showRole(
+      chatId,
+      'student'
+    );
+
+    return;
+  }
+
+  if (
+    action === 'role_parent'
+  ) {
+
+    await showRole(
+      chatId,
+      'parent'
+    );
+
+    return;
+  }
+
+  /*
+  USTOZ TURI
+  */
+
+  if (
+    action === 'teacher_independent'
+  ) {
+
+    await bot.sendMessage(
+      chatId,
+      [
+        '🌐 MUSTAQIL / SHAXSIY KURS',
+        '',
+        'Siz markazsiz, mustaqil ustoz',
+        'sifatida ishlashingiz mumkin.',
+        '',
+        'Sizning shaxsiy:',
+        '📚 Kursingiz',
+        '📋 Guruhlaringiz',
+        '👨‍🎓 O‘quvchilaringiz',
+        '📅 Darslaringiz',
+        '📊 Hisobotlaringiz',
+        '',
+        'CHESARA orqali boshqariladi.'
+      ].join('\n'),
+      teacherMenu
+    );
+
+    return;
+  }
+
+  if (
+    action === 'teacher_join_center'
+  ) {
+
+    await bot.sendMessage(
+      chatId,
+      [
+        '🏢 MARKAZGA QO‘SHILISH',
+        '',
+        'Mavjud CHESARA markazlari shu yerda chiqadi.',
+        '',
+        '🔧 Markazlar bazasi keyingi modulda ulanadi.'
+      ].join('\n'),
+      teacherMenu
+    );
+
+    return;
+  }
+}
+
+/*
+============================================================
+ TELEGRAM MESSAGE LISTENER
+============================================================
+*/
+
+bot.on(
+  'message',
+  async msg => {
+
+    try {
+
+      /*
+      Callback emas, oddiy xabar.
+      */
+
+      if (
+        msg.text
+      ) {
+        await handleText(
+          msg
+        );
+      }
+
+    } catch (error) {
+
+      console.error(
+        '❌ Telegram message xatosi:',
+        error.message
+      );
+
+    }
+  }
+);
+
+/*
+============================================================
+ CALLBACK LISTENER
+============================================================
+*/
+
+bot.on(
+  'callback_query',
+  async query => {
+
+    try {
+
+      await handleCallback(
+        query
+      );
+
+    } catch (error) {
+
+      console.error(
+        '❌ Telegram callback xatosi:',
+        error.message
+      );
+
+    }
+  }
+);
+
+/*
+============================================================
+ POLLING ERROR
+============================================================
+*/
+
+bot.on(
+  'polling_error',
+  error => {
+
+    console.error(
+      '❌ Telegram polling xatosi:',
+      error.message
+    );
+
+  }
+);
+
+/*
+============================================================
+ EXPORT
+============================================================
+*/
 
 module.exports = {
+  bot,
   SUPER_ADMIN,
-  ROLE_CHANGE_COOLDOWN_DAYS,
-
-  getUser,
-  getOrCreateUser,
-
+  mainMenu,
+  superAdminMenu,
+  teacherMenu,
+  studentMenu,
+  parentMenu,
+  roleMenu,
+  teacherTypeMenu,
   isSuperAdmin,
-
-  setRole,
-  getRole,
-
-  canChangeRole,
-  getNextRoleChangeDate,
-  getRoleChangeMessage,
-
-  getPermissions,
-  hasPermission,
-
-  createCenter,
-  getCenters,
-  getCenter,
-
-  requestCenterJoin,
-  approveCenterJoin,
-
-  setIndependentTeacher,
-  setCenterTeacher,
-
-  getAllUsers
+  showStart,
+  showSuperAdmin,
+  showRole,
+  handleText,
+  handleCallback
 };
